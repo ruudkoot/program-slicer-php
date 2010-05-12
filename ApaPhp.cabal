@@ -1,0 +1,23 @@
+Name:               ApaPhp
+Version:            1.0
+Cabal-Version:      >= 1.2
+License:            GPL
+Author:             Bram Schuur
+                    Ruud Koot
+                    Henk-Erik van der Hoek
+Synopsis:           Soft type analysis for PHP
+Description:        Soft type analysis for PHP
+Build-Type:         Simple
+
+Executable apaphp
+  Main-Is:          Main.hs
+  Build-Depends:    base       >= 3 && < 5
+                  , parsec     == 2.*
+                  , containers >= 0.2                  
+                  , bytestring
+                  , binary
+                  , FUtil      == 0.1
+                  , derive
+                  , MissingH
+                  , mtl
+  Hs-Source-Dirs:   src/
