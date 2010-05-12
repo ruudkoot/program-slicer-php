@@ -1,5 +1,7 @@
 module Main where
 
+import System.Environment
+
 import qualified Parser.Ast as AST
 import Parser.Ast hiding (parse)
 import qualified Text.ParserCombinators.Parsec as PS
@@ -12,4 +14,6 @@ doParse input = let parsePHP::Parser Ast
                      Right x -> x
 
 main::IO ()
-main = print $ doParse "$a = 1 + 5;"
+main = do (file:_) <- getArgs
+          inp <- readFile file           
+          print (unparse (doParse inp))
