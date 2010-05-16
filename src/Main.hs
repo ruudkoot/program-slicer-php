@@ -7,6 +7,7 @@ import PHP.Parser.Ast hiding (parse)
 import qualified Text.ParserCombinators.Parsec as PS
 
 import PHP.Simple.Ast2Simple
+import PHP.Simple.Statement
 
 doParse :: String -> Ast
 doParse input = let parsePHP::Parser Ast
@@ -18,4 +19,4 @@ doParse input = let parsePHP::Parser Ast
 main::IO ()
 main = do (file:_) <- getArgs
           inp <- readFile file           
-          print $ toSimple.doParse $ inp
+          print $ usedVars.toSimple.doParse $ inp

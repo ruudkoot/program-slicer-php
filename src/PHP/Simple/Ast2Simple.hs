@@ -28,9 +28,11 @@ fStat (StmtBreak _ _ _)             = St.Break
 fStat (StmtContinue  _ _ _)         = St.Continue
 
 fStat (StmtFuncDef (Func _ _ nm (WSCap _ args _) blc)) 
-                                    = let args' = either (const []) (map ((\(VarMbVal (Var n _) _) -> n).funcArgVar.wsCapMain)) args 
+                                    = let args' = either (const []) (map unparse) args 
                                       in St.FuncDef nm args' (fB2Stat blc)
 fStat (StmtReturn _ exp _)          = St.Return $ fmap (fExpr.fst) exp
+
+fStat (StmtNothing _)               = St.Expr (Ex.Const "Nothing")
 fStat s                             = error $ "No support for statement:" ++ show s
 
 fB2Stat :: Block Stmt -> [St.Statement]

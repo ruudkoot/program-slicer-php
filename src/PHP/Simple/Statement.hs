@@ -2,6 +2,9 @@ module PHP.Simple.Statement where
 
 import PHP.Simple.Expression
 
+import qualified Data.Set as Set
+import Data.Maybe
+
 type PHPProgram = [Statement]
 
 data Statement =                  
@@ -18,6 +21,7 @@ data Statement =
     deriving (Eq, Show)
 
 type StatAlg s e =
+    (ExpAlg e,
     (String -> e -> s
     ,e -> s
     ,e -> [s] -> [s] -> s
@@ -25,10 +29,10 @@ type StatAlg s e =
     ,s
     ,s
     ,String -> [String] -> [s] -> s
-    ,Maybe e -> s)
+    ,Maybe e -> s))
 
-foldStat::StatAlg s e -> ExpAlg e -> Statement -> s
-foldStat (as,ex,i,whil,break,cont,fund,ret) (bin,un,con,var,fun) = foldStat'
+foldStat::StatAlg s e -> Statement -> s
+foldStat ((bin,un,con,var,fun),(as,ex,i,whil,break,cont,fund,ret)) = foldStat'
   where
     foldExp' (BinOp e1 s e2) = bin (foldExp' e1) s (foldExp' e2)
     foldExp' (UnaryOp s e)   = un s (foldExp' e)
@@ -46,3 +50,20 @@ foldStat (as,ex,i,whil,break,cont,fund,ret) (bin,un,con,var,fun) = foldStat'
 
     foldStat' (FuncDef s ss sts)= fund s ss (map foldStat' sts)
     foldStat' (Return me)       = ret (fmap foldExp' me)
+
+statUsedVarsAlg::StatAlg (Set.Set String) (Set.Set String)
+statUsedVarsAlg = (expVarsAlg,(as,ex,i,whil,break,cont,fund,ret))
+  where
+    as s e          = Set.insert s e
+    ex e            = e
+    
+    i e ss1 ss2     = e `Set.union` Set.unions ss1 `Set.union` Set.unions ss2
+    whil e ss       = e `Set.union` Set.unions ss
+    break           = Set.empty
+    cont            = Set.empty
+    
+    fund s ss sts   = Set.fromList ss `Set.union` Set.unions sts
+    ret me          = fromMaybe Set.empty me
+
+usedVars::PHPProgram -> (Set.Set String)
+usedVars = Set.unions .map (foldStat statUsedVarsAlg)

@@ -1,6 +1,6 @@
 module PHP.Simple.Expression where
 
-import Data.List
+import qualified Data.Set as Set
 
 data Expression =
       BinOp     Expression String Expression
@@ -27,27 +27,30 @@ foldExp (bin,un,con,var,fun) = foldExp'
     foldExp' (Func s es)     = fun s (map foldExp' es)
 
 
-varsAlg::ExpAlg [String]
-varsAlg = (bin,un,con,var,fun)
+expIdentityAlg::ExpAlg Expression
+expIdentityAlg = (BinOp, UnaryOp, Const, Var, Func)
+
+expVarsAlg::ExpAlg (Set.Set String)
+expVarsAlg = (bin,un,con,var,fun)
   where
-    bin e1 s e2 = e1 `union` e2 
+    bin e1 s e2 = e1 `Set.union` e2 
     un s e      = e
-    con s       = []
-    var s       = [s]
-    fun s es    = foldr union [] es
+    con s       = Set.empty
+    var s       = Set.singleton s
+    fun s es    = Set.unions es
 
-vars::Expression -> [String]
-vars = foldExp varsAlg  
+expVars::Expression -> (Set.Set String)
+expVars = foldExp expVarsAlg  
 
 
-funcsAlg::ExpAlg [String]
-funcsAlg = (bin,un,con,var,fun)
+expFuncsAlg::ExpAlg (Set.Set String)
+expFuncsAlg = (bin,un,con,var,fun)
   where
-    bin e1 s e2 = e1 `union` e2
+    bin e1 s e2 = e1 `Set.union` e2
     un s e      = e
-    con s       = []
-    var s       = []
-    fun s es    = foldr union [s] es
+    con s       = Set.empty
+    var s       = Set.empty
+    fun s es    = Set.insert s (Set.unions es)
 
-funcs::Expression -> [String]
-funcs = foldExp funcsAlg
+expFuncs::Expression -> (Set.Set String)
+expFuncs = foldExp expFuncsAlg
