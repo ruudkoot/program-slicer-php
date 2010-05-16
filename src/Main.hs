@@ -2,9 +2,11 @@ module Main where
 
 import System.Environment
 
-import qualified Parser.Ast as AST
-import Parser.Ast hiding (parse)
+import qualified PHP.Parser.Ast as AST
+import PHP.Parser.Ast hiding (parse)
 import qualified Text.ParserCombinators.Parsec as PS
+
+import PHP.Simple.Ast2Simple
 
 doParse :: String -> Ast
 doParse input = let parsePHP::Parser Ast
@@ -16,4 +18,4 @@ doParse input = let parsePHP::Parser Ast
 main::IO ()
 main = do (file:_) <- getArgs
           inp <- readFile file           
-          print (unparse (doParse inp))
+          print $ toSimple.doParse $ inp

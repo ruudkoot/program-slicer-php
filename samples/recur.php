@@ -1,8 +1,3 @@
-<html>
-<head>
-<title>Recursion</title>
-</head>
-<body>
 <?php
      function cnt_backwards($from) {
           $from--;
@@ -15,5 +10,3 @@
      }
      cnt_backwards(5);
 ?>
-</body>
-</html>

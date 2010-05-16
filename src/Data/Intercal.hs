@@ -1,3 +1,4 @@
+
 {-# LANGUAGE DeriveDataTypeable #-}
 
 module Data.Intercal where
@@ -105,3 +106,14 @@ append :: a -> b -> Intercal b a -> Intercal b a
 append a b (Interend b0) = Intercal b0 a $ Interend b
 append a b (Intercal b0 a0 rest) = Intercal b0 a0 $ append a b rest
 
+--Project out
+unIntercal::Intercal a b -> ([a],[b])
+unIntercal (Intercal a b xs) = let (as,bs) = unIntercal xs 
+                               in (a:as,b:bs)
+unIntercal (Interend a)      = ([a], [])
+
+intercalAs::Intercal a b -> [a]
+intercalAs = fst.unIntercal
+
+intercalBs::Intercal a b -> [b]
+intercalBs = snd.unIntercal
