@@ -28,5 +28,4 @@ instance Unparse Ast where
 instance Parse Ast where
   parse = liftM2 Ast parse stmtListParser
 
-$(derive makeBinary ''Ast)
 

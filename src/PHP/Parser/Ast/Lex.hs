@@ -434,7 +434,3 @@ tokChildrenP = identCI tokChildren
 tokAttribute = "attribute"
 tokAttributeP = identCI tokAttribute
 
-$(derive makeBinary ''HereDoc)
-$(derive makeBinary ''NumLit)
-$(derive makeBinary ''StrLit)
-

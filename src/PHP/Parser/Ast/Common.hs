@@ -116,6 +116,3 @@ instance (Parse (a, WS)) => Parse (WSCap a) where
 instance Parse a => Parse (a, WS) where
   parse = liftM2 (,) parse parse
 
-$(derive makeBinary ''WSElem)
-$(derive makeBinary ''WSCap)
-
