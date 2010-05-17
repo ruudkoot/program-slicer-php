@@ -26,6 +26,8 @@ main = do   (file:_) <- getArgs
             print $ usedVars tree
             print "Labels:"
             printLabels $ labels tree
+            print "Flow:"
+            print $ flow tree
 
 printLabels::IM.IntMap Statement -> IO ()
 printLabels = mapM_ (\(n,s) -> putStrLn (show n ++ ": "++show s)).IM.toList

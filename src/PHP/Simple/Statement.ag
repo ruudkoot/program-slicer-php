@@ -13,7 +13,7 @@ DATA Statement
     | Assign    var:String exp:Expression
     | Expr      exp:Expression  
     
-    | If        exp:Expression then:StatementList else:StatementList
+    | If        exp:Expression thn:StatementList els:StatementList
     | While     exp:Expression block:StatementList
     | Break
     | Continue
@@ -32,25 +32,62 @@ ATTR Statements [
                   labels USE {`IM.union`} {IM.empty}: {IM.IntMap Statement}
                 | vars USE {`S.union`} {S.empty}: {S.Set String}
                   me :SELF
-                  meSmall :SELF                  
+                  meSmall :SELF 
+                  flow USE {++} {[]}: {[(Int,Int)]}                           
                 ]
 
+ATTR Statement [
+               |
+               | line :Int 
+               ]
+
+
+            
 --Free variables
 SEM Statement
     | Assign    +vars    = S.insert @var    
     | FuncDef   +vars    = S.union (S.fromList @args)
 
---Shrink labels
+--Shrinked statements
 SEM StatementList
     | Cons  lhs.meSmall = []
 
 --Labels
 SEM Statement
     | Assign Expr If While Break Continue FuncDef Return
-        loc.line : UNIQUEREF lines    
-        +labels = IM.insert @loc.line @meSmall
+        loc.linel : UNIQUEREF lines    
+        lhs.line = @loc.linel
+        +labels = IM.insert @loc.linel @meSmall
+
+--Flow
+ATTR StatementList  [
+                    |
+                    | firstLabel :Int
+                      lastLabel  :Int
+                    ]
+
+ATTR Statements [ outLabel : Int
+                |
+                |
+                ]
+
+SEM StatementList
+    | Nil  lhs.lastLabel  = 0
+           lhs.firstLabel = 0
+    | Cons lhs.lastLabel  = if @tl.lastLabel == 0 then @hd.line else @tl.lastLabel
+           lhs.firstLabel = @hd.line
+           tl.outLabel    = if @tl.firstLabel == 0 then @lhs.outLabel else @tl.firstLabel
+           lhs.flow       = if @tl.firstLabel == 0 
+                            then (@hd.line, @lhs.outLabel) : @hd.flow
+                            else ((@hd.line, @tl.firstLabel) : @tl.flow) ++ @hd.flow 
+
+SEM Statement
+    | If    lhs.flow       = (@loc.linel, @thn.firstLabel):(@loc.linel, @els.firstLabel): @thn.flow ++ @els.flow
+    | While block.outLabel = @loc.linel
+--            lhs.flow      = 
 
 {
+
 nextUnique :: Int -> (Int, Int)
 nextUnique u = (u+1, u)
 
@@ -58,11 +95,20 @@ usedVars::StatementList -> S.Set String
 usedVars slist = vars_Syn_StatementList $ wrap_StatementList (sem_StatementList slist) inh
     where inh = Inh_StatementList
                 { lines_Inh_StatementList = 0
-                , labels_Inh_StatementList = IM.empty}
+                , labels_Inh_StatementList = IM.empty
+                , outLabel_Inh_StatementList = 9999}
 
 labels::StatementList -> IM.IntMap Statement
 labels slist = labels_Syn_StatementList $ wrap_StatementList (sem_StatementList slist) inh
     where inh = Inh_StatementList
                 { lines_Inh_StatementList = 0
-                , labels_Inh_StatementList = IM.empty}
+                , labels_Inh_StatementList = IM.empty
+                , outLabel_Inh_StatementList = 9999}
+
+flow::StatementList -> [(Int,Int)]
+flow slist = flow_Syn_StatementList $ wrap_StatementList (sem_StatementList slist) inh
+    where inh = Inh_StatementList
+                { lines_Inh_StatementList = 0
+                , labels_Inh_StatementList = IM.empty
+                , outLabel_Inh_StatementList = 9999}
 }
