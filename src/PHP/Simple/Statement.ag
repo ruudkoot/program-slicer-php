@@ -2,6 +2,7 @@ MODULE {PHP.Simple.Statement}
 {}
 {
 import qualified Data.Set as S
+import qualified Data.IntMap as IM
 }
 
 INCLUDE "Expression.ag"
@@ -27,16 +28,41 @@ TYPE StatementList = [ Statement ]
 SET Statements = StatementList Statement
     
 ATTR Statements [
-                |
+                | lines: Int
+                  labels USE {`IM.union`} {IM.empty}: {IM.IntMap Statement}
                 | vars USE {`S.union`} {S.empty}: {S.Set String}
+                  me :SELF
+                  meSmall :SELF                  
                 ]
 
 --Free variables
 SEM Statement
     | Assign    +vars    = S.insert @var    
     | FuncDef   +vars    = S.union (S.fromList @args)
+
+--Shrink labels
+SEM StatementList
+    | Cons  lhs.meSmall = []
+
+--Labels
+SEM Statement
+    | Assign Expr If While Break Continue FuncDef Return
+        loc.line : UNIQUEREF lines    
+        +labels = IM.insert @loc.line @meSmall
+
 {
+nextUnique :: Int -> (Int, Int)
+nextUnique u = (u+1, u)
 
 usedVars::StatementList -> S.Set String
-usedVars = sem_StatementList
+usedVars slist = vars_Syn_StatementList $ wrap_StatementList (sem_StatementList slist) inh
+    where inh = Inh_StatementList
+                { lines_Inh_StatementList = 0
+                , labels_Inh_StatementList = IM.empty}
+
+labels::StatementList -> IM.IntMap Statement
+labels slist = labels_Syn_StatementList $ wrap_StatementList (sem_StatementList slist) inh
+    where inh = Inh_StatementList
+                { lines_Inh_StatementList = 0
+                , labels_Inh_StatementList = IM.empty}
 }

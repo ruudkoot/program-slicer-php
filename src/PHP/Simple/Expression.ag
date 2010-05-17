@@ -23,6 +23,8 @@ ATTR Expressions [
                  |
                  | vars     USE {`S.union`} {S.empty}: {S.Set String}
                    funcs    USE {`S.union`} {S.empty}: {S.Set String}
+                   me : SELF
+                   meSmall : SELF
                  ]
 
 --Free variables
