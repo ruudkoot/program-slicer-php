@@ -1,0 +1,3 @@
+#!/bin/bash
+uuagc Expression.ag -dfcsw
+uuagc Statement.ag -dfcsw

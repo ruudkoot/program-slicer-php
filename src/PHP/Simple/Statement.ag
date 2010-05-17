@@ -1,0 +1,42 @@
+MODULE {PHP.Simple.Statement}
+{}
+{
+import qualified Data.Set as S
+}
+
+INCLUDE "Expression.ag"
+
+PRAGMA genlinepragmas
+
+DATA Statement
+    | Assign    var:String exp:Expression
+    | Expr      exp:Expression  
+    
+    | If        exp:Expression then:StatementList else:StatementList
+    | While     exp:Expression block:StatementList
+    | Break
+    | Continue
+
+    | FuncDef   name:String args:{[String]} block:StatementList
+    | Return    exp:Expression
+
+DERIVING Statement: Eq, Show
+
+TYPE StatementList = [ Statement ]
+
+SET Statements = StatementList Statement
+    
+ATTR Statements [
+                |
+                | vars USE {`S.union`} {S.empty}: {S.Set String}
+                ]
+
+--Free variables
+SEM Statement
+    | Assign    +vars    = S.insert @var    
+    | FuncDef   +vars    = S.union (S.fromList @args)
+{
+
+usedVars::StatementList -> S.Set String
+usedVars = sem_StatementList
+}

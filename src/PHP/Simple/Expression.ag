@@ -1,0 +1,36 @@
+MODULE {PHP.Simple.Expression}
+{}
+{
+import qualified Data.Set as S
+}
+
+PRAGMA genlinepragmas
+
+DATA Expression 
+    | BinOp     left: Expression  op: String  right: Expression
+    | UnaryOp   op: String exp: Expression
+    | Const     value: String
+    | Var       value: String
+    | Func      name: String  args: ExpressionList
+
+TYPE ExpressionList = [ Expression ]
+
+SET Expressions = ExpressionList Expression
+    
+DERIVING Expression: Eq, Show
+
+ATTR Expressions [
+                 |
+                 | vars     USE {`S.union`} {S.empty}: {S.Set String}
+                   funcs    USE {`S.union`} {S.empty}: {S.Set String}
+                 ]
+
+--Free variables
+SEM Expression    
+    | Var       lhs.vars = S.singleton @value
+
+--Functions
+SEM Expression
+    | Func      +funcs = S.insert @name
+{
+}
