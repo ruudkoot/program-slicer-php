@@ -1,0 +1,5 @@
+file : "src/PHP/Simple/Expression.ag"
+options : data, catas, semfuns, signatures, wrappers
+
+file : "src/PHP/Simple/Statement.ag"
+options : data, catas, semfuns, signatures, wrappers
