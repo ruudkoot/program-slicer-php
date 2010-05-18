@@ -60,31 +60,24 @@ SEM Statement
         +labels = IM.insert @loc.linel @meSmall
 
 --Flow
-ATTR StatementList  [
-                    |
-                    | firstLabel :Int
-                      lastLabel  :Int
-                    ]
 
-ATTR Statements [ outLabel : Int
-                |
-                |
-                ]
+--Denotes entrance of a block
+ATTR StatementList  [||firstLabel :Int]
+
+--Holds value where to go when done.
+ATTR Statements [outLabel : Int||]
 
 SEM StatementList
-    | Nil  lhs.lastLabel  = 0
-           lhs.firstLabel = 0
-    | Cons lhs.lastLabel  = if @tl.lastLabel == 0 then @hd.line else @tl.lastLabel
-           lhs.firstLabel = @hd.line
-           tl.outLabel    = if @tl.firstLabel == 0 then @lhs.outLabel else @tl.firstLabel
-           lhs.flow       = if @tl.firstLabel == 0 
-                            then (@hd.line, @lhs.outLabel) : @hd.flow
-                            else ((@hd.line, @tl.firstLabel) : @tl.flow) ++ @hd.flow 
+    | Nil  lhs.firstLabel = 0
+    | Cons lhs.firstLabel = @hd.line
+           hd.outLabel    = if @tl.firstLabel == 0 then @lhs.outLabel else @tl.firstLabel           
 
 SEM Statement
-    | If    lhs.flow       = (@loc.linel, @thn.firstLabel):(@loc.linel, @els.firstLabel): @thn.flow ++ @els.flow
+    | Assign Expr While
+            +flow          = (@loc.linel, @lhs.outLabel):
+    | If    +flow          = [(@loc.linel, @thn.firstLabel),(@loc.linel, @els.firstLabel)]++
     | While block.outLabel = @loc.linel
---            lhs.flow      = 
+            +flow          = (@loc.linel, @block.firstLabel):
 
 {
 
