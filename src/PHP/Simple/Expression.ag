@@ -19,20 +19,30 @@ SET Expressions = ExpressionList Expression
     
 DERIVING Expression: Eq, Show
 
-ATTR Expressions [
-                 |
-                 | vars     USE {`S.union`} {S.empty}: {S.Set String}
-                   funcs    USE {`S.union`} {S.empty}: {S.Set String}
-                   me : SELF
-                   meSmall : SELF
-                 ]
 
 --Free variables
+ATTR Expressions [||vars USE {`S.union`} {S.empty}: {S.Set String}]
+
 SEM Expression    
     | Var       lhs.vars = S.singleton @value
 
 --Functions
+ATTR Expressions [||funcs USE {`S.union`} {S.empty}: {S.Set String}]
+
 SEM Expression
     | Func      +funcs = S.insert @name
+
+--Copy self
+ATTR Expressions [||                 
+                   me : SELF
+                   meSmall : SELF
+                 ]
+
 {
+
+expFreeVars::Expression -> S.Set String
+expFreeVars exp = vars_Syn_Expression $ wrap_Expression (sem_Expression exp) Inh_Expression
+
+expFuncs::Expression -> S.Set String
+expFuncs exp = funcs_Syn_Expression $ wrap_Expression (sem_Expression exp) Inh_Expression
 }
