@@ -1,4 +1,5 @@
 <?php
+     print("Een test!");
      function cnt_backwards($from) {
           $from--;
           if($from <= 1) {
@@ -6,7 +7,7 @@
                return;
           }
           print($from);
-          cnt_backwards($from);
+          $ret = cnt_backwards($from);
      }
-     cnt_backwards(5);
+     $ret = cnt_backwards(5);
 ?>

@@ -4,7 +4,7 @@ import PHP.Parser.Ast
 import PHP.Parser.Ast.Lex
 
 --import qualified PHP.Simple.Expression as Ex
-import qualified PHP.Simple.Statement as St
+import qualified PHP.Simple.SimpleAst as St
 
 import qualified Data.Intercal as IC
 import Data.Maybe

@@ -7,7 +7,9 @@ import PHP.Parser.Ast hiding (parse,labels)
 import qualified Text.ParserCombinators.Parsec as PS
 
 import PHP.Simple.Ast2Simple
-import PHP.Simple.Statement
+import qualified PHP.Simple.SimpleAst as S
+
+import qualified EMF.Program as P
 
 import qualified Data.IntMap as IM
 
@@ -21,13 +23,14 @@ doParse input = let parsePHP::Parser Ast
 main::IO ()
 main = do   (file:_) <- getArgs
             inp <- readFile file
-            let tree = toSimple $ doParse inp           
+            let tree::[S.Statement]
+                tree = toSimple $ doParse inp           
             print "Used variables:"
-            print $ usedVars tree
+            print $ S.usedVars tree
             print "Labels:"
-            printLabels $ labels tree
+            printLabels $ S.labels tree
             print "Flow:"
-            print $ flow tree
+            print $ S.flow tree
 
-printLabels::IM.IntMap Statement -> IO ()
+printLabels::IM.IntMap P.Statement -> IO ()
 printLabels = mapM_ (\(n,s) -> putStrLn (show n ++ ": "++show s)).IM.toList

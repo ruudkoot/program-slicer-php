@@ -1,0 +1,205 @@
+MODULE {PHP.Simple.SimpleAst}
+{}
+{
+import Data.List
+import qualified Data.Set as S
+import qualified Data.IntMap as IM
+import qualified EMF.Program as P
+}
+
+PRAGMA genlinepragmas
+
+--Expressions
+DATA Expression 
+    | BinOp     left: Expression  op: String  right: Expression
+    | UnaryOp   op: String exp: Expression
+    | Const     value: String
+    | Var       value: String
+    | Func      name: String  args: ExpressionList
+DERIVING Expression: Eq, Show
+
+TYPE ExpressionList = [ Expression ]
+
+SET Expressions = Expression ExpressionList
+
+
+
+--Statements
+DATA Statement
+    | Assign    var:String exp:Expression
+    | Expr      exp:Expression  
+    
+    | If        exp:Expression thn:StatementList els:StatementList
+    | While     exp:Expression block:StatementList
+    | Break
+    | Continue
+
+    | FuncDef   name:String args:{[String]} block:StatementList
+    | Return    exp:Expression
+DERIVING Statement: Eq, Show
+
+TYPE StatementList = [ Statement ]
+
+SET Statements = StatementList Statement
+
+
+SET All        = Statements Expressions
+
+--Labelnumbers
+ATTR All [|labelcount:Int|] --Accumulator for labels
+
+SEM Expression    
+    | BinOp UnaryOp Var Const Func
+        loc.label   : UNIQUEREF labelcount
+    | Func
+        loc.labelOut: UNIQUEREF labelcount
+
+SEM ExpressionList
+    | Cons
+        loc.label   : UNIQUEREF labelcount
+
+SEM Statement
+    | Assign Expr If While Break Continue FuncDef Return
+        loc.label   : UNIQUEREF labelcount        
+
+
+
+
+
+--SimpleExp
+{-Replace functions with variables-}
+ATTR Expression [||simpleExp:{P.Expression}]
+
+SEM Expression
+    | BinOp   lhs.simpleExp = P.BinOp @left.simpleExp @op @right.simpleExp
+    | UnaryOp lhs.simpleExp = P.UnaryOp @op @exp.simpleExp
+    | Var     lhs.simpleExp = P.Var @value
+    | Const   lhs.simpleExp = P.Const @value
+    | Func    loc.funcVar   = "$_" ++ show @loc.labelOut
+              lhs.simpleExp = P.Var @loc.funcVar
+
+--Labels
+ATTR All [|labels USE {`IM.union`} {IM.empty}: {IM.IntMap P.Statement}|]
+ATTR ExpressionList [||varlist: {[String]}]
+ATTR Expression [||myvar: String]
+
+SEM Statement
+    | Assign    +labels = IM.insert @loc.label (P.Assign @var @exp.simpleExp)
+    | Expr      +labels = IM.insert @loc.label (P.Expr @exp.simpleExp)
+
+    | If        +labels = IM.insert @loc.label (P.If @exp.simpleExp)
+    | While     +labels = IM.insert @loc.label (P.While @exp.simpleExp)
+    | Break     +labels = IM.insert @loc.label P.Break
+    | Continue  +labels = IM.insert @loc.label P.Continue
+    
+    | FuncDef   +labels = IM.insert @loc.label (P.FuncIn @name @args)
+    | Return    +labels = IM.insert @loc.label (P.Return @exp.simpleExp)
+
+SEM ExpressionList
+    | Nil       lhs.varlist = []
+    | Cons      +labels = IM.insert @loc.label (P.Assign @hd.myvar @hd.simpleExp)
+                +varlist= (@hd.myvar:)
+
+SEM Expression
+    | BinOp UnaryOp Var Const Func
+                lhs.myvar = "$_"++show @loc.label
+    | Func      +labels   = IM.union (IM.fromList [( @loc.label   , P.FuncCall @name @args.varlist), 
+                                                   ( @loc.labelOut, P.FuncBack @loc.funcVar)])
+
+--Used variables
+ATTR All [|| vars USE {`S.union`} {S.empty}: {S.Set String}]
+
+SEM ExpressionList
+    | Cons      +vars = S.insert @hd.myvar
+
+SEM Expression
+    | Var       lhs.vars = S.singleton @value
+    | Func      lhs.vars = S.fromList (("$_" ++ show @loc.labelOut): @args.varlist)
+
+SEM Statement
+    | Assign    +vars = S.insert @var    
+    | FuncDef   +vars = S.union (S.fromList @args)
+
+--Denotes entrance of a block
+ATTR All [exit   :Int --Holds value where to go when done.
+          ret    :Int
+          cont   :Int
+          break  :Int
+         |
+         |flow USE {++} {[]}: {[(Int,Int)]}
+          entry :Int --Holds value where to go when entering.
+         ]
+
+SEM StatementList
+    | Nil       lhs.entry       = @lhs.exit 
+    | Cons      lhs.entry       = @hd.entry
+                hd.exit         = @tl.entry
+
+SEM Statement
+    | Break Continue Return
+                lhs.entry       = @loc.label
+    
+    | Assign Expr While If
+                lhs.entry       = @exp.entry
+                exp.exit        = @loc.label
+       
+    | Assign Expr While
+                +flow           = ((@loc.label, @lhs.exit):)
+    | If        +flow           = ([(@loc.label, @thn.entry),(@loc.label, @els.entry)]++)
+    | While     block.exit      = @loc.label
+                +flow           = ((@loc.label, @block.entry):)
+    | FuncDef   lhs.entry       = @lhs.exit
+                block.exit      = 9999
+
+SEM Expression    
+    | Func      +flow           = ([(@loc.label, findFunc @name @lhs.labels), 
+                                    (@loc.labelOut, @lhs.exit)]++)
+                lhs.entry       = @args.entry
+                args.exit       = @loc.label                 
+    | Const Var BinOp UnaryOp
+                lhs.entry       = @lhs.exit
+
+SEM ExpressionList
+    | Nil       lhs.entry       = @lhs.exit --Chain instruction together
+    | Cons      lhs.entry       = @hd.entry
+                hd.exit         = @loc.label
+                +flow           = ((@loc.label, @lhs.exit):)        
+
+
+{
+
+findFunc::String -> IM.IntMap P.Statement -> Int
+findFunc s = maybe 0 fst . find f . IM.toList
+    where f (i, P.FuncIn n as) = n == s
+          f _               = False
+
+nextUnique :: Int -> (Int, Int)
+nextUnique u = (u+1, u)
+
+inh::Inh_StatementList
+inh = Inh_StatementList
+      { labelcount_Inh_StatementList = 0
+      , labels_Inh_StatementList = IM.empty
+      , exit_Inh_StatementList = 9999
+      , ret_Inh_StatementList = 0
+      , cont_Inh_StatementList = 0
+      , break_Inh_StatementList = 0
+      }
+
+usedVars::StatementList -> S.Set String
+usedVars slist = vars_Syn_StatementList $ wrap_StatementList (sem_StatementList slist) inh
+
+labels::StatementList -> IM.IntMap P.Statement
+labels slist = labels_Syn_StatementList $ wrap_StatementList (sem_StatementList slist) inh
+
+flow::StatementList -> [(Int,Int)]
+flow slist = flow_Syn_StatementList $ wrap_StatementList (sem_StatementList slist) inh
+
+{-
+expFreeVars::Expression -> S.Set String
+expFreeVars exp = vars_Syn_Expression $ wrap_Expression (sem_Expression exp) Inh_Expression
+
+expFuncs::Expression -> S.Set String
+expFuncs exp = funcs_Syn_Expression $ wrap_Expression (sem_Expression exp) Inh_Expression
+-}
+}
