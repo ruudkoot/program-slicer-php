@@ -148,7 +148,8 @@ SEM Statement
     | If        +flow           = ([(@loc.label, @thn.entry),(@loc.label, @els.entry)]++)
     | While     block.exit      = @loc.label
                 +flow           = ((@loc.label, @block.entry):)
-    | FuncDef   lhs.entry       = @lhs.exit
+    | FuncDef   +flow           = ((@loc.label, @block.entry):)
+                lhs.entry       = @lhs.exit
                 block.exit      = 9999
 
 SEM Expression    
