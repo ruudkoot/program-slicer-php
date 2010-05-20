@@ -31,6 +31,8 @@ main = do   (file:_) <- getArgs
             printLabels $ S.labels tree
             print "Flow:"
             print $ S.flow tree
+            print "Entry label:"
+            print $ S.entry tree
 
 printLabels::IM.IntMap P.Statement -> IO ()
 printLabels = mapM_ (\(n,s) -> putStrLn (show n ++ ": "++show s)).IM.toList

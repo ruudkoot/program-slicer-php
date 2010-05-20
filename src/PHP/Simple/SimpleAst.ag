@@ -120,59 +120,71 @@ SEM Statement
     | Assign    +vars = S.insert @var    
     | FuncDef   +vars = S.union (S.fromList @args)
 
+--Fix entries and exits for blocks
+
 --Denotes entrance of a block
 ATTR All [exit   :Int --Holds value where to go when done.
           ret    :Int
           cont   :Int
           break  :Int
          |
-         |flow USE {++} {[]}: {[(Int,Int)]}
+         |
           entry :Int --Holds value where to go when entering.
          ]
 
 SEM StatementList
-    | Nil       lhs.entry       = @lhs.exit 
-    | Cons      lhs.entry       = @hd.entry
-                hd.exit         = @tl.entry
-
-SEM Statement
-    | Break Continue Return
-                lhs.entry       = @loc.label
-    
-    | Assign Expr While If
-                lhs.entry       = @exp.entry
-                exp.exit        = @loc.label
-       
-    | Assign Expr While
-                +flow           = ((@loc.label, @lhs.exit):)
-    | If        +flow           = ([(@loc.label, @thn.entry),(@loc.label, @els.entry)]++)
-    | While     block.exit      = @loc.label
-                +flow           = ((@loc.label, @block.entry):)
-    | FuncDef   +flow           = ((@loc.label, @block.entry):)
-                lhs.entry       = @lhs.exit
-                block.exit      = 9999
-
-SEM Expression    
-    | Func      +flow           = ([(@loc.label, findFunc @name @lhs.labels), 
-                                    (@loc.labelOut, @lhs.exit)]++)
-                lhs.entry       = @args.entry
-                args.exit       = @loc.label                 
-    | Const Var BinOp UnaryOp
-                lhs.entry       = @lhs.exit
+    | Nil       lhs.entry   = @lhs.exit 
+    | Cons      lhs.entry   = @hd.entry
+                hd.exit     = @tl.entry
 
 SEM ExpressionList
-    | Nil       lhs.entry       = @lhs.exit --Chain instruction together
-    | Cons      lhs.entry       = @hd.entry
-                hd.exit         = @loc.label
-                +flow           = ((@loc.label, @lhs.exit):)        
+    | Nil       lhs.entry   = @lhs.exit
+    | Cons      lhs.entry   = @loc.label
+                hd.exit     = @tl.entry
 
+SEM Statement
+    | Break Continue --Just wire through
+                lhs.entry   = @loc.label
+    
+    | Assign Expr While If Return --Wire through expression
+                lhs.entry   = @exp.entry
+                exp.exit    = @loc.label
 
+    | While     block.exit  = @loc.label
+
+    | FuncDef   lhs.entry   = @lhs.exit
+                block.exit  = 9999
+
+SEM Expression    
+    | Func      lhs.entry   = @args.entry
+                args.exit   = @loc.label                 
+
+    | Const Var lhs.entry   = @lhs.exit
+
+{-Calculate flow-}
+--Denotes entrance of a block
+ATTR All [||flow USE {++} {[]}: {[(Int,Int)]}]
+
+SEM Statement       
+    | Assign Expr While
+                +flow   = ((@loc.label, @lhs.exit):)
+    | If        +flow   = ([(@loc.label, @thn.entry),(@loc.label, @els.entry)]++)    
+    | While     +flow   = ((@loc.label, @block.entry):)
+    | FuncDef   +flow   = ((@loc.label, @block.entry):)
+
+SEM Expression    
+    | Func      +flow   = ([(@loc.label, findFunc @name @lhs.labels), 
+                            (@loc.labelOut, @lhs.exit)]++)
+
+SEM ExpressionList
+    | Cons      +flow   = ((@loc.label, @tl.entry):)
+          
 {
 
 findFunc::String -> IM.IntMap P.Statement -> Int
-findFunc s = maybe 0 fst . find f . IM.toList
+findFunc s = maybe 1000 fst . find f . IM.toList
     where f (i, P.FuncIn n as) = n == s
-          f _               = False
+          f _                  = False
 
 nextUnique :: Int -> (Int, Int)
 nextUnique u = (u+1, u)
@@ -195,6 +207,9 @@ labels slist = labels_Syn_StatementList $ wrap_StatementList (sem_StatementList 
 
 flow::StatementList -> [(Int,Int)]
 flow slist = flow_Syn_StatementList $ wrap_StatementList (sem_StatementList slist) inh
+
+entry::StatementList -> Int
+entry slist = entry_Syn_StatementList $ wrap_StatementList (sem_StatementList slist) inh
 
 {-
 expFreeVars::Expression -> S.Set String
