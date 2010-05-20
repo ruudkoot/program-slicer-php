@@ -4,7 +4,9 @@ MODULE {PHP.Simple.SimpleAst}
 import Data.List
 import qualified Data.Set as S
 import qualified Data.IntMap as IM
+import qualified Data.Map as M
 import qualified EMF.Program as P
+import Debug.Trace
 }
 
 PRAGMA genlinepragmas
@@ -42,8 +44,12 @@ TYPE StatementList = [ Statement ]
 
 SET Statements = StatementList Statement
 
+DATA Program    
+    | Program   stats: StatementList
 
-SET All        = Statements Expressions
+SET Inner      = Statements Expressions
+
+SET All        = Inner Program
 
 --Labelnumbers
 ATTR All [|labelcount:Int|] --Accumulator for labels
@@ -161,9 +167,16 @@ SEM Expression
 
     | Const Var lhs.entry   = @lhs.exit
 
+--Create functions
+ATTR Inner [funcs: {M.Map String Int}||]
+
+SEM Program
+    | Program stats.funcs = funcMap @stats.labels
+
 {-Calculate flow-}
 --Denotes entrance of a block
 ATTR All [||flow USE {++} {[]}: {[(Int,Int)]}]
+            
 
 SEM Statement       
     | Assign Expr While
@@ -173,7 +186,7 @@ SEM Statement
     | FuncDef   +flow   = ((@loc.label, @block.entry):)
 
 SEM Expression    
-    | Func      +flow   = ([(@loc.label, findFunc @name @lhs.labels), 
+    | Func      +flow   = ([(@loc.label, M.findWithDefault 1000 @name @lhs.funcs), 
                             (@loc.labelOut, @lhs.exit)]++)
 
 SEM ExpressionList
@@ -181,13 +194,37 @@ SEM ExpressionList
           
 {
 
-findFunc::String -> IM.IntMap P.Statement -> Int
-findFunc s = maybe 1000 fst . find f . IM.toList
-    where f (i, P.FuncIn n as) = n == s
-          f _                  = False
+funcMap :: IM.IntMap P.Statement -> M.Map String Int
+funcMap = foldr f M.empty . IM.toList
+    where f (i, P.FuncIn n as) m = M.insert n i m
+          f _                  m = m
 
 nextUnique :: Int -> (Int, Int)
 nextUnique u = (u+1, u)
+
+inh::Inh_Program
+inh = Inh_Program
+      { labelcount_Inh_Program = 0
+      , labels_Inh_Program = IM.empty
+      , exit_Inh_Program = 9999
+      , ret_Inh_Program = 0
+      , cont_Inh_Program = 0
+      , break_Inh_Program = 0
+      }
+
+usedVars::Program -> S.Set String
+usedVars slist = vars_Syn_Program $ wrap_Program (sem_Program slist) inh
+
+labels::Program -> IM.IntMap P.Statement
+labels slist = labels_Syn_Program $ wrap_Program (sem_Program slist) inh
+
+flow::Program -> [(Int,Int)]
+flow slist = flow_Syn_Program $ wrap_Program (sem_Program slist) inh
+
+entry::Program -> Int
+entry slist = entry_Syn_Program $ wrap_Program (sem_Program slist) inh
+
+{-
 
 inh::Inh_StatementList
 inh = Inh_StatementList
@@ -211,7 +248,6 @@ flow slist = flow_Syn_StatementList $ wrap_StatementList (sem_StatementList slis
 entry::StatementList -> Int
 entry slist = entry_Syn_StatementList $ wrap_StatementList (sem_StatementList slist) inh
 
-{-
 expFreeVars::Expression -> S.Set String
 expFreeVars exp = vars_Syn_Expression $ wrap_Expression (sem_Expression exp) Inh_Expression
 

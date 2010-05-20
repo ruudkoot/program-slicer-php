@@ -12,8 +12,8 @@ import Data.Either
 
 import Common
 
-toSimple :: Ast -> [St.Statement]
-toSimple (Ast _ stmts) = map fStat (IC.intercalBs stmts)
+toSimple :: Ast -> St.Program
+toSimple (Ast _ stmts) = St.Program $ map fStat (IC.intercalBs stmts)
 
 fStat::Stmt -> St.Statement
 fStat (StmtExpr (ExprAssign _ lval _ expr) _ _) 

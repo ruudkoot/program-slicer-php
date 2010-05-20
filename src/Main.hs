@@ -23,7 +23,7 @@ doParse input = let parsePHP::Parser Ast
 main::IO ()
 main = do   (file:_) <- getArgs
             inp <- readFile file
-            let tree::[S.Statement]
+            let tree::S.Program
                 tree = toSimple $ doParse inp           
             print "Used variables:"
             print $ S.usedVars tree
