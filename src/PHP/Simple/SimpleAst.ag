@@ -6,7 +6,7 @@ import Data.List
 import qualified Data.Set as S
 import qualified Data.IntMap as IM
 import qualified Data.Map as M
-import qualified EMF.Program as P
+import qualified EmbellishedMonotoneFramework.Program as P
 import Debug.Trace
 }
 
@@ -53,7 +53,7 @@ SET Inner      = Statements Expressions
 SET All        = Inner Program
 
 --Labelnumbers
-ATTR All [|labelcount:Int|] --Accumulator for labels
+ATTR Inner [|labelcount:Int|] --Accumulator for labels
 
 SEM Expression    
     | BinOp UnaryOp Var Const Func
@@ -68,10 +68,6 @@ SEM ExpressionList
 SEM Statement
     | Assign Expr If While Break Continue FuncDef Return
         loc.label   : UNIQUEREF labelcount        
-
-
-
-
 
 --SimpleExp
 {-Replace functions with variables-}
@@ -111,7 +107,7 @@ SEM Expression
     | BinOp UnaryOp Var Const Func
                 lhs.myvar = "$_"++show @loc.label
     | Func      +labels   = IM.union (IM.fromList [( @loc.label   , P.FuncCall @name @args.varlist), 
-                                                   ( @loc.labelOut, P.FuncBack @loc.funcVar)])
+                                                   ( @loc.labelOut, P.FuncBack @name @loc.funcVar)])
 
 --Used variables
 ATTR All [|| vars USE {`S.union`} {S.empty}: {S.Set String}]
@@ -130,14 +126,13 @@ SEM Statement
 --Fix entries and exits for blocks
 
 --Denotes entrance of a block
-ATTR All [exit   :Int --Holds value where to go when done.
-          ret    :Int
-          cont   :Int
-          break  :Int
-         |
-         |
-          entry :Int --Holds value where to go when entering.
-         ]
+ATTR Inner [exit   :Int --Holds value where to go when done.            
+            cont   :Int
+            break  :Int
+            inFunc :String
+           ||]
+          
+ATTR All   [||entry :Int]
 
 SEM StatementList
     | Nil       lhs.entry   = @lhs.exit 
@@ -158,9 +153,12 @@ SEM Statement
                 exp.exit    = @loc.label
 
     | While     block.exit  = @loc.label
+                block.cont  = @exp.entry
+                block.break = @exp.entry
 
-    | FuncDef   lhs.entry   = @lhs.exit
-                block.exit  = 9999
+    | FuncDef   lhs.entry    = @lhs.exit
+                block.exit   = -1
+                block.inFunc = @name
 
 SEM Expression    
     | Func      lhs.entry   = @args.entry
@@ -169,10 +167,8 @@ SEM Expression
     | Const Var lhs.entry   = @lhs.exit
 
 --Create functions
-ATTR Inner [funcs: {M.Map String Int}||]
-
-SEM Program
-    | Program stats.funcs = funcMap @stats.labels
+ATTR Inner [defs: {M.Map String Int}
+            rets: {M.Map String [Int]}||]
 
 {-Calculate flow-}
 --Denotes entrance of a block
@@ -182,35 +178,48 @@ ATTR All [||flow USE {++} {[]}: {[(Int,Int)]}]
 SEM Statement       
     | Assign Expr While
                 +flow   = ((@loc.label, @lhs.exit):)
-    | If        +flow   = ([(@loc.label, @thn.entry),(@loc.label, @els.entry)]++)    
+    | If        +flow   = ([(@loc.label, @thn.entry)
+                           ,(@loc.label, @els.entry)]++)    
     | While     +flow   = ((@loc.label, @block.entry):)
     | FuncDef   +flow   = ((@loc.label, @block.entry):)
+    | Return    +flow   = ((map (\to -> (@loc.label, to)) (M.findWithDefault [] @lhs.inFunc @lhs.rets))++)
 
 SEM Expression    
-    | Func      +flow   = ([(@loc.label, M.findWithDefault 1000 @name @lhs.funcs), 
-                            (@loc.labelOut, @lhs.exit)]++)
+    | Func      +flow   = ([(@loc.label, M.findWithDefault (-1) @name @lhs.defs)
+                           ,(@loc.labelOut, @lhs.exit)
+                           ,(@loc.label, @loc.labelOut)]++)
 
 SEM ExpressionList
     | Cons      +flow   = ((@loc.label, @tl.entry):)
-          
+
+
+--Setup Program
+SEM Program
+    | Program   stats.defs  = defMap @stats.labels
+                stats.rets  = retMap @stats.labels
+                stats.exit  = -1
+                stats.cont  = -1
+                stats.break = -1
+                stats.labelcount = 0
+                stats.inFunc = "main"          
 {
 
-funcMap :: IM.IntMap P.Statement -> M.Map String Int
-funcMap = foldr f M.empty . IM.toList
+defMap :: IM.IntMap P.Statement -> M.Map String Int
+defMap = foldr f M.empty . IM.toList
     where f (i, P.FuncIn n as) m = M.insert n i m
           f _                  m = m
+
+retMap :: IM.IntMap P.Statement -> M.Map String [Int]
+retMap = foldr f M.empty . IM.toList
+    where f (i, P.FuncBack n as) m = M.insertWith (++) n [i] m
+          f _                    m = m
 
 nextUnique :: Int -> (Int, Int)
 nextUnique u = (u+1, u)
 
 inh::Inh_Program
 inh = Inh_Program
-      { labelcount_Inh_Program = 0
-      , labels_Inh_Program = IM.empty
-      , exit_Inh_Program = 9999
-      , ret_Inh_Program = 0
-      , cont_Inh_Program = 0
-      , break_Inh_Program = 0
+      {labels_Inh_Program = IM.empty
       }
 
 usedVars::Program -> S.Set String
@@ -219,8 +228,11 @@ usedVars slist = vars_Syn_Program $ wrap_Program (sem_Program slist) inh
 labels::Program -> IM.IntMap P.Statement
 labels slist = labels_Syn_Program $ wrap_Program (sem_Program slist) inh
 
+filterFlow::[(Int,Int)] -> [(Int,Int)]
+filterFlow = filter (\(i,t) -> i /= -1 && t /= -1)
+
 flow::Program -> [(Int,Int)]
-flow slist = flow_Syn_Program $ wrap_Program (sem_Program slist) inh
+flow slist = filterFlow $ flow_Syn_Program $ wrap_Program (sem_Program slist) inh
 
 entry::Program -> Int
 entry slist = entry_Syn_Program $ wrap_Program (sem_Program slist) inh

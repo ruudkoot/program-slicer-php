@@ -21,4 +21,6 @@ Executable apaphp
                   , MissingH
                   , mtl        == 1.1.0.2
                   , uuagc
+                  , graphviz
+                  , fgl
   Hs-Source-Dirs:   src/

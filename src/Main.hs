@@ -9,9 +9,11 @@ import qualified Text.ParserCombinators.Parsec as PS
 import PHP.Simple.Ast2Simple
 import qualified PHP.Simple.SimpleAst as S
 
-import qualified EMF.Program as P
+import qualified EmbellishedMonotoneFramework.Program as P
 
 import qualified Data.IntMap as IM
+
+import Control.Concurrent
 
 doParse :: String -> Ast
 doParse input = let parsePHP::Parser Ast
@@ -24,7 +26,9 @@ main::IO ()
 main = do   (file:_) <- getArgs
             inp <- readFile file
             let tree::S.Program
-                tree = toSimple $ doParse inp           
+                tree = toSimple $ doParse inp
+                flow = S.flow tree
+                labels = S.labels tree           
             print "Used variables:"
             print $ S.usedVars tree
             print "Labels:"
@@ -33,6 +37,8 @@ main = do   (file:_) <- getArgs
             print $ S.flow tree
             print "Entry label:"
             print $ S.entry tree
+            P.visualize (IM.toList labels) flow
+            print "Visualized"
 
 printLabels::IM.IntMap P.Statement -> IO ()
 printLabels = mapM_ (\(n,s) -> putStrLn (show n ++ ": "++show s)).IM.toList

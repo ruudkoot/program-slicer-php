@@ -1,8 +1,11 @@
-module EMF.Program where
+module EmbellishedMonotoneFramework.Program where
 
 import qualified Data.Set as S
 import Data.Monoid
 import Data.List
+
+import Data.Graph.Inductive
+import Data.GraphViz
 
 data Statement =
       Assign    {var::String, exp::Expression}
@@ -15,7 +18,7 @@ data Statement =
 
 --Function call
     | FuncCall  {name::String,args::[String]}
-    | FuncBack  {var::String}
+    | FuncBack  {name::String,var::String}
 
 --Function definition
     | FuncIn    {name::String, args::[String]}
@@ -32,10 +35,10 @@ instance Show Statement where
     show (Continue)     = "continue"
 
     show (FuncCall n a) = "call:"++n++"("++concat (intersperse "," a)++")"
-    show (FuncBack var) = "back: "++var
+    show (FuncBack n v) = "back: "++n++":"++v
 
     show (FuncIn n as)  = "def:"++n++"("++concat (intersperse "," as)++")"
-    show (Return e)     = "return "++show e
+    show (Return e)   = "return "++show e
     
 data Expression =
       BinOp     {left::Expression, op::String, right::Expression}
@@ -49,3 +52,10 @@ instance Show Expression where
     show (UnaryOp op exp)   = op++show exp
     show (Const val)        = val
     show (Var val)          = val
+
+visualize::[(Int,Statement)] -> [(Int,Int)] -> IO ()
+visualize n e = let g::Gr String ()
+                    g = mkGraph  (map (\(l,n) -> (l, show n)) n) (map (\(i,e) -> (i,e,())) e)
+                    dotted = graphToDot True g [] (\(l,n) -> [Label (StrLabel n)]) (const [])
+                in do runGraphvizCommand dirCommand dotted Jpeg "test.jpg"
+                      return ()
