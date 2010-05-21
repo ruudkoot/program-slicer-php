@@ -28,15 +28,7 @@ main = do   (file:_) <- getArgs
             let tree::S.Program
                 tree = toSimple $ doParse inp
                 flow = S.flow tree
-                labels = S.labels tree           
-            print "Used variables:"
-            print $ S.usedVars tree
-            print "Labels:"
-            printLabels $ S.labels tree
-            print "Flow:"
-            print $ S.flow tree
-            print "Entry label:"
-            print $ S.entry tree
+                labels = S.labels tree
             P.visualize (IM.toList labels) flow
             print "Visualized"
 

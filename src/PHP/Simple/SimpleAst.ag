@@ -19,17 +19,15 @@ DATA Expression
     | Const     value: String
     | Var       value: String
     | Func      name: String  args: ExpressionList
+    | Assign    var:String exp:Expression  op:String
 DERIVING Expression: Eq, Show
 
 TYPE ExpressionList = [ Expression ]
 
 SET Expressions = Expression ExpressionList
 
-
-
 --Statements
-DATA Statement
-    | Assign    var:String exp:Expression
+DATA Statement    
     | Expr      exp:Expression  
     
     | If        exp:Expression thn:StatementList els:StatementList
@@ -45,153 +43,147 @@ TYPE StatementList = [ Statement ]
 
 SET Statements = StatementList Statement
 
+--Data type to hide the internal functionality of the grammar (instead of complicated wrapper).
 DATA Program    
     | Program   stats: StatementList
 
-SET Inner      = Statements Expressions
+SET Inner      = Statements Expressions --Only inner part of the program (everything excpet top Program datatype).
 
-SET All        = Inner Program
+SET All        = Inner Program --Entire program
 
---Labelnumbers
-ATTR Inner [|labelcount:Int|] --Accumulator for labels
+ATTR All [|labels USE {`IM.union`} {IM.empty}: {IM.IntMap P.Statement} --Map of labels
+          |entry :Int                       --Entry label to code block
+           flow USE {++} {[]}: {[(Int,Int)]} --Accumulated flow graph
+          ]    
+
+ATTR Inner [exit   :Int --Holds value where to go when done with a block.            
+            cont   :Int --Label where to go for continue
+            break  :Int --Label where to go when brak
+            inFunc :String --Label in which function we are
+            defs: {M.Map String Int} --Function definitions, used for lookup of function call
+            rets: {M.Map String [Int]} --List of return statement labels for a certain function, call locations.
+           |labelcount:Int --Incrementor for labels
+           |]
+
+--Unique labels for all in loc.label
+SEM Statement
+    | Expr If While Break Continue FuncDef Return
+        loc.label   : UNIQUEREF labelcount 
+
+SEM ExpressionList
+    | Cons --Labels for replacement variables of function call arguments.
+        loc.label   : UNIQUEREF labelcount 
 
 SEM Expression    
-    | BinOp UnaryOp Var Const Func
+    | BinOp UnaryOp Var Const Func Assign
         loc.label   : UNIQUEREF labelcount
-    | Func
-        loc.labelOut: UNIQUEREF labelcount
+    | Func --Additional label for the return statement
+        loc.labelOut: UNIQUEREF labelcount          
 
-SEM ExpressionList
-    | Cons
-        loc.label   : UNIQUEREF labelcount
 
-SEM Statement
-    | Assign Expr If While Break Continue FuncDef Return
-        loc.label   : UNIQUEREF labelcount        
+--Statements
 
---SimpleExp
-{-Replace functions with variables-}
-ATTR Expression [||simpleExp:{P.Expression}]
-
-SEM Expression
-    | BinOp   lhs.simpleExp = P.BinOp @left.simpleExp @op @right.simpleExp
-    | UnaryOp lhs.simpleExp = P.UnaryOp @op @exp.simpleExp
-    | Var     lhs.simpleExp = P.Var @value
-    | Const   lhs.simpleExp = P.Const @value
-    | Func    loc.funcVar   = "$_" ++ show @loc.labelOut
-              lhs.simpleExp = P.Var @loc.funcVar
-
---Labels
-ATTR All [|labels USE {`IM.union`} {IM.empty}: {IM.IntMap P.Statement}|]
-ATTR ExpressionList [||varlist: {[String]}]
-ATTR Expression [||myvar: String]
+--Statement  
 
 SEM Statement
-    | Assign    +labels = IM.insert @loc.label (P.Assign @var @exp.simpleExp)
-    | Expr      +labels = IM.insert @loc.label (P.Expr @exp.simpleExp)
+    | Expr      lhs.entry = @exp.entry --just pass through
+                exp.exit  = @lhs.exit
 
-    | If        +labels = IM.insert @loc.label (P.If @exp.simpleExp)
-    | While     +labels = IM.insert @loc.label (P.While @exp.simpleExp)
-    | Break     +labels = IM.insert @loc.label P.Break
-    | Continue  +labels = IM.insert @loc.label P.Continue
-    
-    | FuncDef   +labels = IM.insert @loc.label (P.FuncIn @name @args)
-    | Return    +labels = IM.insert @loc.label (P.Return @exp.simpleExp)
-
-SEM ExpressionList
-    | Nil       lhs.varlist = []
-    | Cons      +labels = IM.insert @loc.label (P.Assign @hd.myvar @hd.simpleExp)
-                +varlist= (@hd.myvar:)
-
-SEM Expression
-    | BinOp UnaryOp Var Const Func
-                lhs.myvar = "$_"++show @loc.label
-    | Func      +labels   = IM.union (IM.fromList [( @loc.label   , P.FuncCall @name @args.varlist), 
-                                                   ( @loc.labelOut, P.FuncBack @name @loc.funcVar)])
-
---Used variables
-ATTR All [|| vars USE {`S.union`} {S.empty}: {S.Set String}]
-
-SEM ExpressionList
-    | Cons      +vars = S.insert @hd.myvar
-
-SEM Expression
-    | Var       lhs.vars = S.singleton @value
-    | Func      lhs.vars = S.fromList (("$_" ++ show @loc.labelOut): @args.varlist)
-
-SEM Statement
-    | Assign    +vars = S.insert @var    
-    | FuncDef   +vars = S.union (S.fromList @args)
-
---Fix entries and exits for blocks
-
---Denotes entrance of a block
-ATTR Inner [exit   :Int --Holds value where to go when done.            
-            cont   :Int
-            break  :Int
-            inFunc :String
-           ||]
-          
-ATTR All   [||entry :Int]
-
-SEM StatementList
-    | Nil       lhs.entry   = @lhs.exit 
-    | Cons      lhs.entry   = @hd.entry
-                hd.exit     = @tl.entry
-
-SEM ExpressionList
-    | Nil       lhs.entry   = @lhs.exit
-    | Cons      lhs.entry   = @loc.label
-                hd.exit     = @tl.entry
-
-SEM Statement
-    | Break Continue --Just wire through
-                lhs.entry   = @loc.label
-    
-    | Assign Expr While If Return --Wire through expression
+    | While If Return --For these statements, first run the containing expression and then the command itself.
                 lhs.entry   = @exp.entry
                 exp.exit    = @loc.label
 
-    | While     block.exit  = @loc.label
+    | While     +labels = IM.insert @loc.label (P.While (P.Val . P.Var $ @exp.myvar))
+                +flow   = ([(@loc.label, @lhs.exit) --To exit
+                           ,(@loc.label, @block.entry)]++) --Flow to inner block
+                block.exit  = @exp.entry --Set inherited attributes for while block
                 block.cont  = @exp.entry
                 block.break = @exp.entry
 
-    | FuncDef   lhs.entry    = @lhs.exit
-                block.exit   = -1
-                block.inFunc = @name
+    | If        +labels = IM.insert @loc.label (P.If (P.Val . P.Var $ @exp.myvar))
+                +flow   = ([(@loc.label, @thn.entry) --Add flow for then and else block
+                           ,(@loc.label, @els.entry)]++)
 
-SEM Expression    
-    | Func      lhs.entry   = @args.entry
-                args.exit   = @loc.label                 
+    | Return    +labels = IM.insert @loc.label (P.Return (P.Val . P.Var $ @exp.myvar))
+                    --Return flows to all return labels of calling functions in the program.
+                +flow   = ((map (\to -> (@loc.label, to)) (M.findWithDefault [] @lhs.inFunc @lhs.rets))++)
 
-    | Const Var lhs.entry   = @lhs.exit
+    | FuncDef   +labels = IM.insert @loc.label (P.FuncIn @name @args)
+                +flow   = ((@loc.label, @block.entry):) --Flow form function entry to block
+                lhs.entry    = @lhs.exit --FuncDef = no-op (entry=exit)
+                block.exit   = -1 --A function block has no exit value
+                block.inFunc = @name                
 
---Create functions
-ATTR Inner [defs: {M.Map String Int}
-            rets: {M.Map String [Int]}||]
+    | Break Continue --Just run these statements
+                lhs.entry   = @loc.label
 
-{-Calculate flow-}
---Denotes entrance of a block
-ATTR All [||flow USE {++} {[]}: {[(Int,Int)]}]
-            
+    | Break     +labels = IM.insert @loc.label P.Break
+    | Continue  +labels = IM.insert @loc.label P.Continue
+    
+--Wire the statements through a code block
+SEM StatementList
+    | Nil       lhs.entry   = @lhs.exit --On the end of the block, entry becomes exit.
+    | Cons      lhs.entry   = @hd.entry --Wire the head to the rest of the block and make head the first
+                hd.exit     = @tl.entry
 
-SEM Statement       
-    | Assign Expr While
-                +flow   = ((@loc.label, @lhs.exit):)
-    | If        +flow   = ([(@loc.label, @thn.entry)
-                           ,(@loc.label, @els.entry)]++)    
-    | While     +flow   = ((@loc.label, @block.entry):)
-    | FuncDef   +flow   = ((@loc.label, @block.entry):)
-    | Return    +flow   = ((map (\to -> (@loc.label, to)) (M.findWithDefault [] @lhs.inFunc @lhs.rets))++)
+--Expressions
 
-SEM Expression    
-    | Func      +flow   = ([(@loc.label, M.findWithDefault (-1) @name @lhs.defs)
-                           ,(@loc.labelOut, @lhs.exit)
-                           ,(@loc.label, @loc.labelOut)]++)
+--Expression
+{-Replace functions with variables-}
+ATTR Expression [||
+                    myvar:{String}  --Variable containing inner expression
+                  ]
+ATTR ExpressionList [||varlist: {[String]}]   --List of vars generated for expression
 
-SEM ExpressionList
-    | Cons      +flow   = ((@loc.label, @tl.entry):)
+SEM Expression    --Labels
+    | BinOp Const Func--These expressions get an new unique variable assigned to
+                loc.expvar  = "$_"++show @loc.label       
+                lhs.myvar   = @loc.expvar
 
+    | BinOp     +labels     = IM.insert @loc.label (P.Assign @loc.expvar (P.BinOp (P.Var @left.myvar) @op (P.Var @right.myvar)) "")
+                +flow       = ((@loc.label, @lhs.exit):) --Flow through
+
+                lhs.entry   = @left.entry --Wire through
+                left.exit   = @right.entry
+                right.exit  = @loc.label
+
+    | UnaryOp   +labels     = IM.insert @loc.label $ u2B @exp.myvar @op
+                +flow       = ((@loc.label, @lhs.exit):) --Flow through
+                lhs.entry   = @exp.entry
+                exp.exit    = @loc.label
+
+    | Var       lhs.entry   = @lhs.exit --Wire through
+                lhs.myvar   = @value               
+
+    | Const     +labels     = IM.insert @loc.label (P.Assign @loc.expvar (P.Val .P.Const $ @value) "")
+                +flow       = ((@loc.label, @lhs.exit):) --Flow through
+                lhs.entry   = @loc.label
+
+    | Assign    +labels     = IM.insert @loc.label (P.Assign @var (P.Val . P.Var $ @exp.myvar) @op)
+                +flow       = ((@loc.label, @lhs.exit):) --Flow through
+                lhs.entry   = @exp.entry --Wire through
+                exp.exit    = @loc.label
+                lhs.myvar   = @var --Represented by variable
+
+    | Func      +labels   = IM.union (IM.fromList [( @loc.label   , P.FuncCall @name @args.varlist), 
+                                                   ( @loc.labelOut, P.FuncBack @name @loc.expvar)])
+
+                +flow   = ([(@loc.label, M.findWithDefault (-1) @name @lhs.defs) --Call function
+                           ,(@loc.labelOut, @lhs.exit) --Back to out flow
+                           ,(@loc.label, @loc.labelOut)]++) --Call to Back flow
+                
+                lhs.entry   = @args.entry --Wire function call through aruments
+                args.exit   = @loc.label 
+
+--Expression list
+SEM ExpressionList --Labels
+    | Nil       lhs.varlist = []
+                lhs.entry   = @lhs.exit
+                
+            --Replace list arguments with placeholder variables and corresponding assignments
+    | Cons      +varlist    = (@hd.myvar:) --Create list of replacement values
+                lhs.entry   = @hd.entry
+                hd.exit     = @tl.entry
 
 --Setup Program
 SEM Program
@@ -203,6 +195,11 @@ SEM Program
                 stats.labelcount = 0
                 stats.inFunc = "main"          
 {
+--Convert unary to binary
+u2B::String->String -> P.Statement
+u2B v "++" = P.Assign v (P.Val (P.Const "1")) "+"
+u2B v "--" = P.Assign v (P.Val (P.Const "1")) "-"
+u2B v op   = error $ "No binary operator for "++op
 
 defMap :: IM.IntMap P.Statement -> M.Map String Int
 defMap = foldr f M.empty . IM.toList
@@ -222,9 +219,6 @@ inh = Inh_Program
       {labels_Inh_Program = IM.empty
       }
 
-usedVars::Program -> S.Set String
-usedVars slist = vars_Syn_Program $ wrap_Program (sem_Program slist) inh
-
 labels::Program -> IM.IntMap P.Statement
 labels slist = labels_Syn_Program $ wrap_Program (sem_Program slist) inh
 
@@ -238,29 +232,6 @@ entry::Program -> Int
 entry slist = entry_Syn_Program $ wrap_Program (sem_Program slist) inh
 
 {-
-
-inh::Inh_StatementList
-inh = Inh_StatementList
-      { labelcount_Inh_StatementList = 0
-      , labels_Inh_StatementList = IM.empty
-      , exit_Inh_StatementList = 9999
-      , ret_Inh_StatementList = 0
-      , cont_Inh_StatementList = 0
-      , break_Inh_StatementList = 0
-      }
-
-usedVars::StatementList -> S.Set String
-usedVars slist = vars_Syn_StatementList $ wrap_StatementList (sem_StatementList slist) inh
-
-labels::StatementList -> IM.IntMap P.Statement
-labels slist = labels_Syn_StatementList $ wrap_StatementList (sem_StatementList slist) inh
-
-flow::StatementList -> [(Int,Int)]
-flow slist = flow_Syn_StatementList $ wrap_StatementList (sem_StatementList slist) inh
-
-entry::StatementList -> Int
-entry slist = entry_Syn_StatementList $ wrap_StatementList (sem_StatementList slist) inh
-
 expFreeVars::Expression -> S.Set String
 expFreeVars exp = vars_Syn_Expression $ wrap_Expression (sem_Expression exp) Inh_Expression
 

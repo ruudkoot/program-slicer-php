@@ -9,6 +9,6 @@ while($i <= $n)
     $product = $product * $i;
     $i++;
 }
-print($sum);
-print($product);
+out($sum);
+out($product);
 ?>

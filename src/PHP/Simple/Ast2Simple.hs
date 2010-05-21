@@ -16,8 +16,6 @@ toSimple :: Ast -> St.Program
 toSimple (Ast _ stmts) = St.Program $ map fStat (IC.intercalBs stmts)
 
 fStat::Stmt -> St.Statement
-fStat (StmtExpr (ExprAssign _ lval _ expr) _ _) 
-                                    = St.Assign (unparse lval) (fExpr expr)
 fStat (StmtExpr e _ _)              = St.Expr (fExpr e)
 
 fStat (StmtIf (If ifs els))         = let (IfBlock (WSCap _ (WSCap _ expr _) _) bsts) = head $ IC.intercalAs ifs                                            
@@ -52,4 +50,5 @@ fExpr (ExprRVal (RValROnlyVal (ROnlyValFunc fname _ (Right args))))
                                 = let args' = map (either fExpr (St.Var .unparse).wsCapMain) args
                                   in St.Func (unparse fname) args'
 fExpr (ExprRVal val)            = St.Var (unparse val)
+fExpr (ExprAssign b lval _ exp) = St.Assign (unparse lval) (fExpr exp) (maybe "" unparse b)
 fExpr s = error $ "No support for expression:" ++ show s

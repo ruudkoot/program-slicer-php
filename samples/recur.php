@@ -1,12 +1,12 @@
 <?php
-     print("Een test!");
+     out("Een test!");
      function cnt_backwards($from) {
           $from--;
           if($from <= 1) {
-               print($from);
+               out($from);
                return;
           }
-          print($from);
+          out($from);
           $ret = cnt_backwards($from);
      }
      $ret = cnt_backwards(5);

@@ -9,5 +9,5 @@ while($i <= $n)
         $x = 18;
     $i = $i + 1;
 }
-print($x);
+out($x);
 ?>
