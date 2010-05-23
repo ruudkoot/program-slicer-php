@@ -3,7 +3,6 @@ module PHP.Simple.Ast2Simple(toSimple) where
 import PHP.Parser.Ast
 import PHP.Parser.Ast.Lex
 
---import qualified PHP.Simple.Expression as Ex
 import qualified PHP.Simple.SimpleAst as St
 
 import qualified Data.Intercal as IC
@@ -17,9 +16,11 @@ toSimple (Ast _ stmts) = St.Program $ map fStat (IC.intercalBs stmts)
 
 fStat::Stmt -> St.Statement
 fStat (StmtExpr e _ _)              = St.Expr (fExpr e)
-
 fStat (StmtIf (If ifs els))         = let (IfBlock (WSCap _ (WSCap _ expr _) _) bsts) = head $ IC.intercalAs ifs                                            
                                       in St.If (fExpr expr) (fBoStat bsts) (maybe [] (fBoStat.snd) els)
+fStat (StmtFor (For (WSCap _ (s,c,i) _) block)) 
+                                    = let forP (ForPart p) = either (const $ St.Const "Nothing") (fExpr. wsCapMain . head) p
+                                      in St.For (forP s) (forP c) (forP i) (fBoStat block)
 fStat (StmtWhile (While (WSCap _ (WSCap _ expr _) _) bs))
                                     = St.While (fExpr expr) (fBoStat bs)
 fStat (StmtBreak _ _ _)             = St.Break  
@@ -40,15 +41,17 @@ fBoStat::BlockOrStmt -> [St.Statement]
 fBoStat = either ((:[]).fStat) fB2Stat
 
 fExpr :: Expr -> St.Expression
+fExpr (ExprAssign b lval _ exp) = St.Assign (unparse lval) (fExpr exp) (maybe "" unparse b)
 fExpr (ExprBinOp bop l _ r)     = St.BinOp (fExpr l) (unparse bop) (fExpr r)
 fExpr (ExprPostOp op expr _)    = St.UnaryOp (unparse op) (fExpr expr)
 fExpr (ExprPreOp op _ expr)     = St.UnaryOp (unparse op) (fExpr expr)
 fExpr (ExprNumLit (NumLit c))   = St.Const c
-fExpr (ExprStrLit (StrLit c))   = St.Const c
+fExpr (ExprStrLit (StrLit c))   = St.Const ("\""++c++"\"")
 fExpr (ExprParen (WSCap _ e _)) = fExpr e
 fExpr (ExprRVal (RValROnlyVal (ROnlyValFunc fname _ (Right args)))) 
                                 = let args' = map (either fExpr (St.Var .unparse).wsCapMain) args
                                   in St.Func (unparse fname) args'
 fExpr (ExprRVal val)            = St.Var (unparse val)
-fExpr (ExprAssign b lval _ exp) = St.Assign (unparse lval) (fExpr exp) (maybe "" unparse b)
+fExpr (ExprTernaryIf (TernaryIf c _ t _ e)) 
+                                = St.TernaryIf (fExpr c) (fExpr t) (fExpr e)
 fExpr s = error $ "No support for expression:" ++ show s

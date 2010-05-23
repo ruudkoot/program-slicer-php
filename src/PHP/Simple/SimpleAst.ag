@@ -14,12 +14,15 @@ PRAGMA genlinepragmas
 
 --Expressions
 DATA Expression 
+    | Assign    var:String exp:Expression  op:String
     | BinOp     left: Expression  op: String  right: Expression
     | UnaryOp   op: String exp: Expression
+    
     | Const     value: String
     | Var       value: String
+    
     | Func      name: String  args: ExpressionList
-    | Assign    var:String exp:Expression  op:String
+    | TernaryIf cond:Expression thn:Expression els:Expression
 DERIVING Expression: Eq, Show
 
 TYPE ExpressionList = [ Expression ]
@@ -32,6 +35,8 @@ DATA Statement
     
     | If        exp:Expression thn:StatementList els:StatementList
     | While     exp:Expression block:StatementList
+    | For       start:Expression stop:Expression inc:Expression block:StatementList
+
     | Break
     | Continue
 
@@ -67,7 +72,7 @@ ATTR Inner [exit   :Int --Holds value where to go when done with a block.
 
 --Unique labels for all in loc.label
 SEM Statement
-    | Expr If While Break Continue FuncDef Return
+    | Expr If While Break Continue FuncDef Return For
         loc.label   : UNIQUEREF labelcount 
 
 SEM ExpressionList
@@ -75,10 +80,13 @@ SEM ExpressionList
         loc.label   : UNIQUEREF labelcount 
 
 SEM Expression    
-    | BinOp UnaryOp Var Const Func Assign
+    | BinOp UnaryOp Var Const Func Assign TernaryIf
         loc.label   : UNIQUEREF labelcount
     | Func --Additional label for the return statement
         loc.labelOut: UNIQUEREF labelcount          
+    | TernaryIf
+        loc.thenLabel: UNIQUEREF labelcount
+        loc.elseLabel: UNIQUEREF labelcount
 
 
 --Statements
@@ -98,7 +106,21 @@ SEM Statement
                            ,(@loc.label, @block.entry)]++) --Flow to inner block
                 block.exit  = @exp.entry --Set inherited attributes for while block
                 block.cont  = @exp.entry
-                block.break = @exp.entry
+                block.break = @lhs.exit
+
+    | For       +labels = IM.insert @loc.label (P.While (P.Val . P.Var $ @stop.myvar))
+                +flow   = ([(@loc.label, @lhs.exit)
+                           ,(@loc.label, @block.entry)]++)
+                
+                lhs.entry   = @start.entry --Wire expressions
+                start.exit  = @stop.entry
+                stop.exit   = @loc.label
+                
+                block.exit  = @inc.entry 
+                block.cont  = @inc.entry
+                block.break = @lhs.exit
+                
+                inc.exit    = @stop.entry
 
     | If        +labels = IM.insert @loc.label (P.If (P.Val . P.Var $ @exp.myvar))
                 +flow   = ([(@loc.label, @thn.entry) --Add flow for then and else block
@@ -136,8 +158,9 @@ ATTR Expression [||
 ATTR ExpressionList [||varlist: {[String]}]   --List of vars generated for expression
 
 SEM Expression    --Labels
-    | BinOp Const Func--These expressions get an new unique variable assigned to
+    | BinOp UnaryOp Const Func TernaryIf
                 loc.expvar  = "$_"++show @loc.label       
+    | BinOp Const Func TernaryIf
                 lhs.myvar   = @loc.expvar
 
     | BinOp     +labels     = IM.insert @loc.label (P.Assign @loc.expvar (P.BinOp (P.Var @left.myvar) @op (P.Var @right.myvar)) "")
@@ -147,10 +170,11 @@ SEM Expression    --Labels
                 left.exit   = @right.entry
                 right.exit  = @loc.label
 
-    | UnaryOp   +labels     = IM.insert @loc.label $ u2B @exp.myvar @op
+    | UnaryOp   +labels     = IM.insert @loc.label $ unarySideEffect @exp.myvar @loc.expvar @op
                 +flow       = ((@loc.label, @lhs.exit):) --Flow through
                 lhs.entry   = @exp.entry
                 exp.exit    = @loc.label
+                lhs.myvar   = P.var $ unarySideEffect @exp.myvar @loc.expvar @op
 
     | Var       lhs.entry   = @lhs.exit --Wire through
                 lhs.myvar   = @value               
@@ -174,6 +198,20 @@ SEM Expression    --Labels
                 
                 lhs.entry   = @args.entry --Wire function call through aruments
                 args.exit   = @loc.label 
+    
+    | TernaryIf +labels = IM.union (IM.fromList 
+                            [( @loc.label, (P.If (P.Val . P.Var $ @cond.myvar)))
+                            ,( @loc.thenLabel, (P.Assign @loc.expvar (P.Val . P.Var $ @thn.myvar) ""))
+                            ,( @loc.elseLabel, (P.Assign @loc.expvar (P.Val . P.Var $ @els.myvar) ""))])
+                +flow   = ([(@loc.label, @thn.entry) --Add flow for then and else block
+                           ,(@loc.label, @els.entry)
+                           ,(@loc.thenLabel, @lhs.exit)
+                           ,(@loc.elseLabel, @lhs.exit)]++)
+
+                lhs.entry   = @cond.entry
+                cond.exit   = @loc.label                
+                thn.exit    = @loc.thenLabel
+                els.exit    = @loc.elseLabel
 
 --Expression list
 SEM ExpressionList --Labels
@@ -196,10 +234,11 @@ SEM Program
                 stats.inFunc = "main"          
 {
 --Convert unary to binary
-u2B::String->String -> P.Statement
-u2B v "++" = P.Assign v (P.Val (P.Const "1")) "+"
-u2B v "--" = P.Assign v (P.Val (P.Const "1")) "-"
-u2B v op   = error $ "No binary operator for "++op
+unarySideEffect::String -> String -> String -> P.Statement
+unarySideEffect v vn "++" = P.Assign v (P.Val (P.Const "1")) "+"
+unarySideEffect v vn "--" = P.Assign v (P.Val (P.Const "1")) "-"
+unarySideEffect v vn op   = P.Assign vn (P.UnaryOp (P.Var v) op) ""
+
 
 defMap :: IM.IntMap P.Statement -> M.Map String Int
 defMap = foldr f M.empty . IM.toList

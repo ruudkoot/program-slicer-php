@@ -42,6 +42,7 @@ instance Show Statement where
     
 data Expression =
       BinOp     {left::Value, bop::String, right::Value}
+    | UnaryOp   {expval::Value, op::String}
     | Val       {evalue::Value}
     deriving (Eq,Ord)
 
@@ -52,7 +53,9 @@ data Value =
 
 instance Show Expression where
     show (BinOp l op r)     = show l ++op++ show r
+    show (UnaryOp exp op)   = op++ show exp
     show (Val v)            = show v
+
 instance Show Value where
     show (Const val)        = val
     show (Var val)          = val
