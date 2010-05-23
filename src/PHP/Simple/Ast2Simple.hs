@@ -16,8 +16,10 @@ toSimple (Ast _ stmts) = St.Program $ map fStat (IC.intercalBs stmts)
 
 fStat::Stmt -> St.Statement
 fStat (StmtExpr e _ _)              = St.Expr (fExpr e)
-fStat (StmtIf (If ifs els))         = let (IfBlock (WSCap _ (WSCap _ expr _) _) bsts) = head $ IC.intercalAs ifs                                            
-                                      in St.If (fExpr expr) (fBoStat bsts) (maybe [] (fBoStat.snd) els)
+fStat (StmtIf (If ifs els))         = let mkIf (IfBlock (WSCap _ (WSCap _ expr _) _) bsts) rest =
+                                            [St.If (fExpr expr) (fBoStat bsts) rest]
+                                          elseTail = (maybe [] (fBoStat.snd) els) 
+                                      in head $ foldr mkIf elseTail (IC.intercalAs ifs)
 fStat (StmtFor (For (WSCap _ (s,c,i) _) block)) 
                                     = let forP (ForPart p) = either (const $ St.Const "Nothing") (fExpr. wsCapMain . head) p
                                       in St.For (forP s) (forP c) (forP i) (fBoStat block)
@@ -29,6 +31,7 @@ fStat (StmtContinue  _ _ _)         = St.Continue
 fStat (StmtFuncDef (Func _ _ nm (WSCap _ args _) blc)) 
                                     = let args' = either (const []) (map unparse) args 
                                       in St.FuncDef nm args' (fB2Stat blc)
+fStat (StmtEcho exps _)             = St.Expr $ St.Func "echo" (map (fExpr.wsCapMain) exps)
 fStat (StmtReturn _ exp _)          = St.Return $ maybe (St.Const "Nothing") (fExpr.fst) exp
 
 fStat (StmtNothing _)               = St.Expr (St.Const "Nothing")
