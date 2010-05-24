@@ -8,6 +8,7 @@ type SymbolType = Char
 
 data Expression = Multiplication Expression Expression
                 | Substraction Expression Expression
+                | Addition Expression Expression
                 | GreaterThan Expression Expression
                 | Literal LiteralType
                 | Symbol SymbolType
@@ -23,4 +24,5 @@ freeVariables (Symbol char)               = Set.fromList [char]
 freeVariables (Multiplication left right) = freeVariables left `Set.union` freeVariables right
 freeVariables (Substraction left right)   = freeVariables left `Set.union` freeVariables right
 freeVariables (GreaterThan left right)    = freeVariables left `Set.union` freeVariables right
+freeVariables (Addition left right)       = freeVariables left `Set.union` freeVariables right
  

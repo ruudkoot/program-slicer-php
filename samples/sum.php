@@ -1,4 +1,5 @@
 <?php
+
 function sum_up_to($number) {
     $result = 0;
     $i = 1;
