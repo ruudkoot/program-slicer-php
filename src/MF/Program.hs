@@ -1,12 +1,14 @@
-module EmbellishedMonotoneFramework.Program where
+module MF.Program where
 
 import qualified Data.Set as S
 import qualified Data.IntMap as IM
 import Data.Monoid
 import Data.List
 
-import Data.Graph.Inductive
-import Data.GraphViz
+import qualified Data.Graph.Inductive as G
+import qualified Data.GraphViz as GV
+
+import Data.Maybe
 
 type Label = Int
 type Flow = [(Label, Label)]
@@ -17,7 +19,7 @@ data Program = Program
         , flow          :: Flow
         , startLabel    :: Label
         , finalLabels   :: [Label]
-        , rangeOfInfluence :: IM.IntMap (Set.Set Label)
+        , rangeOfInfluence :: IM.IntMap (S.Set Label)
         }
 
 data Statement =
@@ -62,13 +64,13 @@ freeVariables (Val v)       = freeVar v
 
 
 defined :: Statement -> S.Set SymbolType
-defined (Assign c expr) = S.singleton c
+defined (Assign c expr _)= S.singleton c
 defined (FuncBack _ v)  = S.singleton v
 defined _               = S.empty
 
 
 referenced :: Statement -> S.Set SymbolType
-referenced (Assign c expr)  = freeVariables expr
+referenced (Assign c expr _)= freeVariables expr
 referenced (Expr expr)      = freeVariables expr 
 referenced (While expr)     = freeVariables expr
 referenced (If expr)        = freeVariables expr
@@ -111,8 +113,8 @@ instance Show Value where
     show (Var val)          = val
 
 visualize::[(Int,Statement)] -> [(Int,Int)] -> IO ()
-visualize n e = let g::Gr String ()
-                    g = mkGraph  (map (\(l,n) -> (l, show l ++ ":" ++ show n)) n) (map (\(i,e) -> (i,e,())) e)
-                    dotted = graphToDot True g [] (\(l,n) -> [Label (StrLabel n)]) (const [])
-                in do runGraphvizCommand dirCommand dotted Jpeg "test.jpg"
+visualize n e = let g::G.Gr String ()
+                    g = G.mkGraph  (map (\(l,n) -> (l, show l ++ ":" ++ show n)) n) (map (\(i,e) -> (i,e,())) e)
+                    dotted = GV.graphToDot True g [] (\(l,n) -> [GV.Label (GV.StrLabel n)]) (const [])
+                in do GV.runGraphvizCommand GV.dirCommand dotted GV.Jpeg "test.jpg"
                       return ()

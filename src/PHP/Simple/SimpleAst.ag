@@ -6,7 +6,7 @@ import Data.List
 import qualified Data.Set as S
 import qualified Data.IntMap as IM
 import qualified Data.Map as M
-import qualified EmbellishedMonotoneFramework.Program as P
+import qualified MF.Program as P
 import Debug.Trace
 }
 
@@ -282,11 +282,13 @@ entry slist = entry_Syn_Program $ wrap_Program (sem_Program slist) inh
 roi::Program -> IM.IntMap (S.Set Int)
 roi slist = roi_Syn_Program $ wrap_Program (sem_Program slist) inh
 
-{-
-expFreeVars::Expression -> S.Set String
-expFreeVars exp = vars_Syn_Expression $ wrap_Expression (sem_Expression exp) Inh_Expression
+program::Program -> P.Program
+program p = let res = wrap_Program (sem_Program p) inh
+            in P.Program
+                {P.blocks = labels_Syn_Program res
+                ,P.flow   = filterFlow $ flow_Syn_Program res
+                ,P.startLabel  = entry_Syn_Program res
+                ,P.finalLabels   = []
+                ,P.rangeOfInfluence = roi_Syn_Program res}
 
-expFuncs::Expression -> S.Set String
-expFuncs exp = funcs_Syn_Expression $ wrap_Expression (sem_Expression exp) Inh_Expression
--}
 }

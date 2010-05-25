@@ -6,14 +6,13 @@
 module MF.Analysis where
 
 import           Data.Maybe
-import qualified Data.Map   as Map
+import qualified Data.IntMap   as Map
 import qualified Data.Set   as Set
 
-import MF.Expressions
-import MF.Statements
+import MF.Program
 
 type Worklist         = [(Label, Label)]
-type Context property = Map.Map Label (Set.Set property)
+type Context property = Map.IntMap (Set.Set property)
 
 class Analysis analysis property | analysis -> property where
     flowSelection          :: analysis -> Program -> Flow

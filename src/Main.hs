@@ -9,10 +9,11 @@ import qualified Text.ParserCombinators.Parsec as PS
 import PHP.Simple.Ast2Simple
 import qualified PHP.Simple.SimpleAst as S
 
-import qualified EmbellishedMonotoneFramework.Program as P
+import qualified MF.Program as P
+import MF.ProgramSlicing
 
 import qualified Data.IntMap as IM
-
+import qualified Data.Set as Set
 import Control.Concurrent
 
 doParse :: String -> Ast
@@ -27,12 +28,10 @@ main = do   (file:_) <- getArgs
             inp <- readFile file
             let tree::S.Program
                 tree = toSimple $ doParse inp
-                flow = S.flow tree
-                labels = S.labels tree
-                roi = S.roi tree
-            P.visualize (IM.toList labels) flow
-            print "Visualized"
-            print roi
+                program = S.program tree
+            P.visualize (IM.toList (P.blocks program)) (P.flow program)
+            print "Visualized"        
+            print $ backwardsProgramSlicing program 35 $ Set.fromList ["$product"]
 
 printLabels::IM.IntMap P.Statement -> IO ()
 printLabels = mapM_ (\(n,s) -> putStrLn (show n ++ ": "++show s)).IM.toList
