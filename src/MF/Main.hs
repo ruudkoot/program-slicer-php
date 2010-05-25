@@ -229,12 +229,15 @@ type Context property = Map.Map Label (Set.Set property)
 
 -- Step 1
 solve :: (Analysis analysis property) => analysis -> Program -> Context property
-solve analysis program = internalSolve analysis program worklist context
-        where
-                worklist = flow
-                                        
-                context = Map.fromList (map (\label -> if elem label ((extremalLabels analysis) program) then (label, extremalValue analysis) else (label, Set.empty)) (unique flow))
-                
+solve analysis program = let flow     = (flowSelection analysis) program
+                             worklist = flow
+                             context  = Map.fromList (map transform (unique flow))
+                          in internalSolve analysis program worklist context
+                             where -- Todo replace this with labels function
+                                   unique :: Flow -> [Label]
+                                   unique flow = (Set.toList . Set.fromList) ((fst . unzip) flow ++ (snd . unzip) flow) 
+                                   transform   = (\label -> if elem label ((extremalLabels analysis) program) then (label, extremalValue analysis) else (label, Set.empty))
+               
                 {-
                 Om de leesbaarheid te vergroten heb ik getracht om de lambda functie te herschrijven naar de onderstaande code, dit compileerd echter niet :(
                 
@@ -247,12 +250,7 @@ solve analysis program = internalSolve analysis program worklist context
                                         isExtremalLabel = elem label ((extremalLabels analysis) program)
                 -}
                 
-                -- Todo replace this with labels function
-                unique :: Flow -> [Label]
-                unique flow = (Set.toList . Set.fromList) ((fst . unzip) flow ++ (snd . unzip) flow) 
-                
-                flow     = (flowSelection analysis) program
-
+ 
 -- Step 2
 internalSolve :: (Analysis analysis property) => analysis -> Program -> Worklist -> Context property -> Context property  
 internalSolve analysis program [] context = context
