@@ -32,6 +32,7 @@ function powerFor($base,$exp)
     return $ret;
 }
 
-echo powerFor(4,5), powerRec(4,5);
-
+$a = powerFor(4,5);
+$b = powerRec(4,5);
+trace($a);
 ?>

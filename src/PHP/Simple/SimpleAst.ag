@@ -74,6 +74,8 @@ ATTR Inner [exit   :Int --Holds value where to go when done with a block.
 SEM Statement
     | Expr If While Break Continue FuncDef Return For
         loc.label   : UNIQUEREF labelcount 
+    | FuncDef
+        loc.retLabel: UNIQUEREF labelcount 
 
 SEM ExpressionList
     | Cons --Labels for replacement variables of function call arguments.
@@ -130,10 +132,12 @@ SEM Statement
                     --Return flows to all return labels of calling functions in the program.
                 +flow   = ((map (\to -> (@loc.label, to)) (M.findWithDefault [] @lhs.inFunc @lhs.rets))++)
 
-    | FuncDef   +labels = IM.insert @loc.label (P.FuncIn @name @args)
-                +flow   = ((@loc.label, @block.entry):) --Flow form function entry to block
+    | FuncDef   +labels = IM.union (IM.fromList [(@loc.label   , P.FuncIn @name @args)
+                                                ,(@loc.retLabel, P.Return (P.Val . P.Const $ "Nothing"))])
+                +flow   = (((@loc.label, @block.entry) : 
+                            map (\to -> (@loc.retLabel, to)) (M.findWithDefault [] @name @lhs.rets)) ++) --Flow form function entry to block
                 lhs.entry    = @lhs.exit --FuncDef = no-op (entry=exit)
-                block.exit   = -1 --A function block has no exit value
+                block.exit   = @loc.retLabel --A function block has no exit value
                 block.inFunc = @name                
 
     | Break Continue --Just run these statements

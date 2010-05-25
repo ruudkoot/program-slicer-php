@@ -15,6 +15,7 @@ import MF.ProgramSlicing
 import qualified Data.IntMap as IM
 import qualified Data.Set as Set
 import Control.Concurrent
+import System.FilePath
 
 doParse :: String -> Ast
 doParse input = let parsePHP::Parser Ast
@@ -29,7 +30,7 @@ main = do   (file:_) <- getArgs
             let tree::S.Program
                 tree = toSimple $ doParse inp
                 program = S.program tree
-            P.visualize (IM.toList (P.blocks program)) (P.flow program)
+            P.visualizeProgram (takeBaseName file) program
             print "Visualized"        
             print $ backwardsProgramSlicing program
 

@@ -23,4 +23,5 @@ Executable apaphp
                   , uuagc
                   , graphviz
                   , fgl
+                  , filepath
   Hs-Source-Dirs:   src/
