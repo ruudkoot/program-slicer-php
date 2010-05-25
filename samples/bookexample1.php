@@ -13,4 +13,5 @@ while($i <= $n)
 
 echo $sum;
 echo $product;
+trace($product);
 ?>

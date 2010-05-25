@@ -28,16 +28,14 @@ controlDependentBranchStatements program relevantStatements = Set.fromList $ Map
                 inRange range = (not . Set.null) $ Set.intersection range relevantStatements                
 
 
-backwardsProgramSlicing :: Program -> Label -> Set.Set SymbolType -> Context SymbolType
-backwardsProgramSlicing program startLabel startValue = internalBackwardsProgramSlicing program relevantVariables relevantStatements
-        where 
+backwardsProgramSlicing :: Program -> Context SymbolType
+backwardsProgramSlicing program = internalBackwardsProgramSlicing program relevantVariables relevantStatements
+        where   (startLabel, startValue) = head $ traceStatement program
+
                 analysis = DirectlyRelevantVariables startLabel startValue
         
                 relevantVariables = (transferAll analysis) program (solve analysis program)
                 relevantStatements = directlyRelevantStatements program relevantVariables 
-
-
-
 
 internalBackwardsProgramSlicing :: Program -> Context SymbolType -> Set.Set Label -> Context SymbolType
 internalBackwardsProgramSlicing program relevantVariables relevantStatements | newRelevantStatements == relevantStatements = relevantVariables 
@@ -55,8 +53,12 @@ internalBackwardsProgramSlicing program relevantVariables relevantStatements | n
                 
                 newRelevantStatements = Set.union branchStatements $ directlyRelevantStatements program newRelevantVariables          
 
-
-
+-- |Produces a list of calls to the trace function and the associated variables.
+traceStatement :: Program -> [(Label, Set.Set SymbolType)]
+traceStatement = foldr f [] . Map.toList . blocks
+    where
+        f (l, (FuncCall "trace" vars)) r = (l, Set.fromList vars):r
+        f _                            r = r
 
 
 

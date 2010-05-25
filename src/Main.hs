@@ -31,7 +31,7 @@ main = do   (file:_) <- getArgs
                 program = S.program tree
             P.visualize (IM.toList (P.blocks program)) (P.flow program)
             print "Visualized"        
-            print $ backwardsProgramSlicing program 35 $ Set.fromList ["$product"]
+            print $ backwardsProgramSlicing program
 
 printLabels::IM.IntMap P.Statement -> IO ()
 printLabels = mapM_ (\(n,s) -> putStrLn (show n ++ ": "++show s)).IM.toList
