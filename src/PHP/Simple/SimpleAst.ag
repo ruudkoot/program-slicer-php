@@ -223,6 +223,15 @@ SEM ExpressionList --Labels
                 lhs.entry   = @hd.entry
                 hd.exit     = @tl.entry
 
+--Range of influence
+ATTR All [||roi USE {`IM.union`} {IM.empty}:{IM.IntMap (S.Set Int)}]
+
+SEM Statement
+    | While     +roi = IM.insert @loc.label (S.fromList (IM.keys @block.labels))
+    | For       +roi = IM.insert @loc.label (S.fromList (IM.keys @block.labels))
+    | If        +roi = IM.insert @loc.label (S.fromList (IM.keys @thn.labels ++ IM.keys @els.labels))
+    | FuncDef   +roi = IM.insert @loc.label (S.fromList (IM.keys @block.labels))
+
 --Setup Program
 SEM Program
     | Program   stats.defs  = defMap @stats.labels
@@ -269,6 +278,9 @@ flow slist = filterFlow $ flow_Syn_Program $ wrap_Program (sem_Program slist) in
 
 entry::Program -> Int
 entry slist = entry_Syn_Program $ wrap_Program (sem_Program slist) inh
+
+roi::Program -> IM.IntMap (S.Set Int)
+roi slist = roi_Syn_Program $ wrap_Program (sem_Program slist) inh
 
 {-
 expFreeVars::Expression -> S.Set String

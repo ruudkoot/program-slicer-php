@@ -29,8 +29,10 @@ main = do   (file:_) <- getArgs
                 tree = toSimple $ doParse inp
                 flow = S.flow tree
                 labels = S.labels tree
+                roi = S.roi tree
             P.visualize (IM.toList labels) flow
             print "Visualized"
+            print roi
 
 printLabels::IM.IntMap P.Statement -> IO ()
 printLabels = mapM_ (\(n,s) -> putStrLn (show n ++ ": "++show s)).IM.toList
