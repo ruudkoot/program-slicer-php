@@ -12,8 +12,6 @@ type    Lab   = Integer
 type    Var   =     String
 type    Num_  =     Integer
 
-
-
 data Stmt where
     Assign     :: { x_assign      :: Var
                   , a_assign      :: Exp

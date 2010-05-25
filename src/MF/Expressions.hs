@@ -1,4 +1,4 @@
-module Expressions where
+module MF.Expressions where
 
 import qualified Data.Set as Set
 

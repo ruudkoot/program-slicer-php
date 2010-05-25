@@ -1,9 +1,9 @@
-module Statements where
+module MF.Statements where
 
 import qualified Data.Map as Map
 import qualified Data.Set as Set
 import Data.Maybe
-import Expressions
+import MF.Expressions
 
 data Statement = AssignmentStatement SymbolType Expression
                | ExpressionStatement Expression

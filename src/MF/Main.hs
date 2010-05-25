@@ -3,15 +3,19 @@
 {-# LANGUAGE TypeSynonymInstances   #-}
 {-# LANGUAGE ScopedTypeVariables    #-}
 
-module Main where
+module MF.Main where
 
 import qualified Data.Set as Set  
 import qualified Data.Map as Map
 
 import Data.Maybe
-import Expressions
-import Statements
+import MF.Expressions
+import MF.Statements
 import Debug.Trace
+
+import MF.Analysis
+import MF.LiveVariableAnalysis
+import MF.DirectlyRelevantVariables
 
 -- Define the input, Life variable analysis, zie boek
 {-
@@ -101,165 +105,10 @@ main = print $ backwardsProgramSlicing program 10 $ Set.fromList ['p']
                 relevantStatements = directlyRelevantStatements program relevantVariables 
 -}
 
-class Analysis analysis property | analysis -> property where
-    flowSelection          :: analysis -> Program -> Flow
-    extremalLabels         :: analysis -> Program -> [Label]
-    extremalValue          :: analysis -> Set.Set property
-    join                   :: analysis -> Set.Set property -> Set.Set property -> Set.Set property
-    isMoreInformative      :: analysis -> Set.Set property -> Set.Set property -> Bool
-    transfer               :: analysis -> Statement -> Set.Set property -> Set.Set property
-    transferAll            :: analysis -> Program -> Context property -> Context property
-    transferAll       analysis program context = Map.mapWithKey toEffect context
-            where
-                    toEffect :: Label -> Set.Set property -> Set.Set property
-                    toEffect label input = transfer analysis (statementAt program label) input
-
-
-data LiveVariableAnalysis = LiveVariableAnalysis
-
-instance Analysis LiveVariableAnalysis SymbolType where
-    flowSelection     _ program = (reverseFlow . flow) program
-    extremalLabels    _ program = finalLabels program
-    extremalValue     _         = Set.empty
-    join              _         = Set.union
-    isMoreInformative _         = Set.isSubsetOf 
-    transfer          _ statement input = (input `Set.difference` (kill statement)) `Set.union` (generate statement)
-            where 
-                    kill :: Statement -> Set.Set SymbolType
-                    kill (AssignmentStatement c expr)     = Set.fromList [c]
-                    kill (ExpressionStatement expr)       = Set.empty
-                    
-                    generate :: Statement -> Set.Set SymbolType
-                    generate (AssignmentStatement c expr) = freeVariables expr
-                    generate (ExpressionStatement expr)   = freeVariables expr  
-
-
-
--- Zie paper frank, blz 5 onderaan
-defined :: Statement -> Set.Set SymbolType
-defined (AssignmentStatement c expr) = Set.fromList[c]
-defined (ExpressionStatement expr)   = Set.empty
-
--- Zie paper frank, blz 5 onderaan
-referenced :: Statement -> Set.Set SymbolType
-referenced (AssignmentStatement c expr) = freeVariables expr
-referenced (ExpressionStatement expr)   = freeVariables expr 
-
-
--- Zie Paper Frank, blz. 8
-{-
-directlyRelevantVariables :: Label -> Set.Set SymbolType -> Analysis SymbolType 
-directlyRelevantVariables startLabel startValue = Analysis flowSelection extremalLabels extremalValue join isMoreInformative transfer transferAll
-        where 
--}
-
-data DirectlyRelevantVariables = DirectlyRelevantVariables Label (Set.Set SymbolType)
-
-instance Analysis DirectlyRelevantVariables SymbolType where
-    flowSelection     _ program = (reverseFlow . flow) program
-    extremalLabels    (DirectlyRelevantVariables startLabel startValue) program  = [startLabel]
-    extremalValue     (DirectlyRelevantVariables startLabel startValue)          = startValue
-    join              _         = Set.union
-    isMoreInformative _         = Set.isSubsetOf
-    transfer          _ statement input = (input `Set.difference` (kill statement)) `Set.union` (generate statement input)
-            where 
-                    kill :: Statement -> Set.Set SymbolType
-                    kill = defined
-                    
-                    generate :: Statement -> Set.Set SymbolType -> Set.Set SymbolType
-                    generate (AssignmentStatement c expr) input | Set.member c input = freeVariables expr
-                                                                | otherwise          = Set.empty
-                    generate (ExpressionStatement expr) input = Set.empty
-                                
-
-directlyRelevantStatements :: Program -> Context SymbolType -> Set.Set Label 
-directlyRelevantStatements program relevantVariables = Set.fromList $ map fst $ filter isRelevant (flow program)
-        where
-                isRelevant :: (Label, Label) -> Bool
-                isRelevant (i,j) = (not . Set.null) $ Set.intersection a b
-                        where 
-                                a :: Set.Set SymbolType 
-                                a = fromJust (Map.lookup j relevantVariables)
-                                
-                                b :: Set.Set SymbolType 
-                                b = defined (statementAt program i)
-                                
-                                
-controlDependentBranchStatements :: Program -> Set.Set Label -> Set.Set Label
-controlDependentBranchStatements program relevantStatements = Map.keysSet $ Map.filter inRange (rangeOfInfluence program)
-        where
-                inRange :: Set.Set Label -> Bool
-                inRange range = (not . Set.null) $ Set.intersection range relevantStatements                
-
-
-backwardsProgramSlicing :: Program -> Label -> Set.Set SymbolType -> Context SymbolType
-backwardsProgramSlicing program startLabel startValue = internalBackwardsProgramSlicing program relevantVariables relevantStatements
-        where 
-                analysis = DirectlyRelevantVariables startLabel startValue
-        
-                relevantVariables = (transferAll analysis) program (solve analysis program)
-                relevantStatements = directlyRelevantStatements program relevantVariables 
 
 
 
 
-internalBackwardsProgramSlicing :: Program -> Context SymbolType -> Set.Set Label -> Context SymbolType
-internalBackwardsProgramSlicing program relevantVariables relevantStatements | newRelevantStatements == relevantStatements = relevantVariables 
-                                                                             | otherwise                                   = internalBackwardsProgramSlicing program newRelevantVariables newRelevantStatements
-        where 
-                branchStatements = controlDependentBranchStatements program relevantStatements
-        
-        
-                newRelevantVariables  = foldl union relevantVariables $ Set.toList branchStatements
-                        where
-                                union :: Context SymbolType -> Label -> Context SymbolType
-                                union left right = Map.unionWith Set.union left $ (transferAll analysis) program $ solve analysis program
-                                        where
-                                                analysis = DirectlyRelevantVariables right $ referenced $ statementAt program right               
-                
-                newRelevantStatements = Set.union branchStatements $ directlyRelevantStatements program newRelevantVariables          
 
 
 
-
-type Worklist = [(Label, Label)]
-type Context property = Map.Map Label (Set.Set property)
-
-
-
--- Step 1
-solve :: (Analysis analysis property) => analysis -> Program -> Context property
-solve analysis program = let flow     = (flowSelection analysis) program
-                             worklist = flow
-                             context  = Map.fromList (map transform (unique flow))
-                          in internalSolve analysis program worklist context
-                             where -- Todo replace this with labels function
-                                   unique :: Flow -> [Label]
-                                   unique flow = (Set.toList . Set.fromList) ((fst . unzip) flow ++ (snd . unzip) flow) 
-                                   transform   = (\label -> if elem label ((extremalLabels analysis) program) then (label, extremalValue analysis) else (label, Set.empty))
-               
-                {-
-                Om de leesbaarheid te vergroten heb ik getracht om de lambda functie te herschrijven naar de onderstaande code, dit compileerd echter niet :(
-                
-                context = Map.fromList (map transform (unique flow))
-                
-                transform :: Label -> (Label, Set.Set property)
-                transform label | isExtremalLabel = (label, extremalValue analysis)
-                                | otherwise       = (label, Set.empty)
-                                where 
-                                        isExtremalLabel = elem label ((extremalLabels analysis) program)
-                -}
-                
- 
--- Step 2
-internalSolve :: (Analysis analysis property) => analysis -> Program -> Worklist -> Context property -> Context property  
-internalSolve analysis program [] context = context
-internalSolve analysis program ((start, end):worklistTail) context = internalSolve analysis program newWorklist newContext
-        where 
-                newWorklist     = if moreInformative then worklistTail else worklistTail ++ [(l', l'') | (l', l'') <- flow, l' == end] 
-                newContext      = if moreInformative then context      else Map.insert end ((join analysis) (fromJust (Map.lookup end context))  effect) context  
-                
-                effect          = (transfer analysis) (fromJust (Map.lookup start (blocks program))) (fromJust (Map.lookup start context))
-                moreInformative = isMoreInformative analysis effect (fromJust (Map.lookup end context))
-                
-                flow            = flowSelection analysis program
