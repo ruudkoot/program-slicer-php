@@ -18,7 +18,7 @@ directlyRelevantStatements program relevantVariables = Set.fromList $ map fst $ 
                                 a = fromJust (Map.lookup j relevantVariables)
                                 
                                 b :: Set.Set SymbolType 
-                                b = defined (statementAt program i)
+                                b = modified (statementAt program i)
                                 
                                 
 controlDependentBranchStatements :: Program -> Set.Set Label -> Set.Set Label

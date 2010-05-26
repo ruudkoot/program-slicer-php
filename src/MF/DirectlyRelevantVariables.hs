@@ -20,18 +20,10 @@ instance Analysis DirectlyRelevantVariables SymbolType where
     extremalLabels    (DirectlyRelevantVariables startLabel startValue) program  = [startLabel]
     extremalValue     (DirectlyRelevantVariables startLabel startValue)          = startValue
     join              _         = Set.union
-    isMoreInformative _         = Set.isSubsetOf
-    transfer          _ statement input = (input `Set.difference` (kill statement)) `Set.union` (generate statement input)
-            where 
-                    kill :: Statement -> Set.Set SymbolType
-                    kill = defined
-                    
-                    generate :: Statement -> Set.Set SymbolType -> Set.Set SymbolType
-                    {-generate (AssignmentStatement c expr) input | Set.member c input = freeVariables expr
-                                                                | otherwise          = Set.empty
-                    generate (ExpressionStatement expr) input = Set.empty-}
-                    generate st input | Set.null (input `Set.intersection` (defined st))    = Set.empty
-                                      | otherwise                                   = referenced st
+    isMoreInformative _         = Set.isSubsetOf    
+    kill     _ statement _      = modified statement                  
+    generate _ statement input  | Set.null (input `Set.intersection` (modified statement))  = Set.empty
+                                | otherwise                                                 = referenced statement
           
 
 

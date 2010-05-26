@@ -63,10 +63,10 @@ freeVariables (UnaryOp e _) = freeVar e
 freeVariables (Val v)       = freeVar v
 
 
-defined :: Statement -> S.Set SymbolType
-defined (Assign c expr _)= S.singleton c
-defined (FuncBack _ v)  = S.singleton v
-defined _               = S.empty
+modified :: Statement -> S.Set SymbolType
+modified (Assign c expr _)= S.singleton c
+modified (FuncBack _ v)   = S.singleton v
+modified _                = S.empty
 
 
 referenced :: Statement -> S.Set SymbolType

@@ -234,7 +234,7 @@ SEM Statement
     | While     +roi = IM.insert @loc.label (S.fromList (IM.keys @block.labels))
     | For       +roi = IM.insert @loc.label (S.fromList (IM.keys @block.labels))
     | If        +roi = IM.insert @loc.label (S.fromList (IM.keys @thn.labels ++ IM.keys @els.labels))
-    | FuncDef   +roi = IM.insert @loc.label (S.fromList (IM.keys @block.labels))
+    | FuncDef   +roi = IM.insert @loc.label (S.fromList ((@loc.retLabel : IM.keys  @block.labels)))
 
 --Setup Program
 SEM Program

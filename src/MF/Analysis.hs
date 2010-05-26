@@ -10,17 +10,30 @@ import qualified Data.IntMap   as Map
 import qualified Data.Set   as Set
 
 import MF.Program
+import Debug.Trace
 
 type Worklist         = [(Label, Label)]
 type Context property = Map.IntMap (Set.Set property)
 
-class Analysis analysis property | analysis -> property where
+class (Ord property, Show property) => Analysis analysis property | analysis -> property where
     flowSelection          :: analysis -> Program -> Flow
+    
     extremalLabels         :: analysis -> Program -> [Label]
     extremalValue          :: analysis -> Set.Set property
+    extremalValueAt        :: analysis -> Label -> Program -> Set.Set property
+    extremalValueAt analysis label program | isExtremalLabel = extremalValue analysis
+                                           | otherwise       = Set.empty
+                                                where isExtremalLabel = label `elem` extremalLabels analysis program       
+
     join                   :: analysis -> Set.Set property -> Set.Set property -> Set.Set property
     isMoreInformative      :: analysis -> Set.Set property -> Set.Set property -> Bool
+
+    kill                   :: analysis -> Statement -> Set.Set property -> Set.Set property
+    generate               :: analysis -> Statement -> Set.Set property -> Set.Set property
+    
     transfer               :: analysis -> Statement -> Set.Set property -> Set.Set property
+    transfer          analysis statement input = (input `Set.difference` (kill analysis statement input)) `Set.union` (generate analysis statement input)
+
     transferAll            :: analysis -> Program -> Context property -> Context property
     transferAll       analysis program context = Map.mapWithKey toEffect context
             where
@@ -30,23 +43,23 @@ class Analysis analysis property | analysis -> property where
     solve :: analysis -> Program -> Context property
     solve analysis program = let flow     = flowSelection analysis program
                                  worklist = flow
-                                 context  = Map.fromList (map transform (unique flow))
-                                          where -- Todo replace this with labels function
-                                                unique :: Flow -> [Label]
-                                                unique flow = (Set.toList . Set.fromList) ((fst . unzip) flow ++ (snd . unzip) flow) 
-                                                transform label | isExtremalLabel = (label, extremalValue analysis)
-                                                                | otherwise       = (label, Set.empty)
-                                                                where isExtremalLabel = label `elem` extremalLabels analysis program
-                              in solve' analysis program worklist context
-                                 where solve' :: analysis -> Program -> Worklist -> Context property -> Context property  
-                                       solve' analysis program [] context = context
-                                       solve' analysis program ((start, end):worklistTail) context = let newWorklist     = if moreInformative
-                                                                                                                           then worklistTail
-                                                                                                                           else worklistTail ++ [(l', l'') | (l', l'') <- flow, l' == end] 
-                                                                                                         newContext      = if moreInformative
-                                                                                                                           then context
-                                                                                                                           else Map.insert end (join analysis (fromJust (Map.lookup end context)) effect) context  
-                                                                                                         effect          = transfer analysis (fromJust (Map.lookup start (blocks program))) (fromJust (Map.lookup start context))
-                                                                                                         moreInformative = isMoreInformative analysis effect (fromJust (Map.lookup end context))
-                                                                                                         flow            = flowSelection analysis program
-                                                                                                      in solve' analysis program newWorklist newContext
+                                 contexts = Map.mapWithKey (\l _ -> extremalValueAt analysis l program) (blocks program)
+                                 
+                                 solve' :: analysis -> Program -> Worklist -> Context property -> Context property  
+                                 solve' analysis program [] contexts = contexts
+                                 solve' analysis program ((start, end):worklistTail) contexts = 
+                                     let --Calculate new values for effect of start and context of end
+                                         newEffect       = transfer analysis (fromJust (Map.lookup start (blocks program))) (fromJust (Map.lookup start contexts))
+                                         oldContext      = fromJust (Map.lookup end contexts)
+                                         newContext      = join analysis oldContext newEffect
+                                         
+                                         --Updated worklist/contexts
+                                         newWorklist     = worklistTail ++ [(l', l'') | (l', l'') <- flow, l' == end] 
+                                         newContexts     = Map.insert end newContext contexts
+                                     in if (oldContext /= newContext) --Conext value changed?
+                                        then solve' analysis program newWorklist newContexts
+                                        else solve' analysis program worklistTail contexts
+                             in solve' analysis program worklist contexts
+
+--visualize           :: analysis -> Program -> String -> IO ()
+--    visualizeSteps      :: analysis -> Program -> String -> IO ()
