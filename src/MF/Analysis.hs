@@ -51,7 +51,8 @@ class (Ord property, Show property) => Analysis analysis property | analysis -> 
                                      let --Calculate new values for effect of start and context of end
                                          newEffect       = transfer analysis (fromJust (Map.lookup start (blocks program))) (fromJust (Map.lookup start contexts))
                                          oldContext      = fromJust (Map.lookup end contexts)
-                                         newContext      = join analysis oldContext newEffect
+                                         ajoin           = join analysis
+                                         newContext      = oldContext `ajoin` newEffect `ajoin` extremalValueAt analysis end program
                                          
                                          --Updated worklist/contexts
                                          newWorklist     = worklistTail ++ [(l', l'') | (l', l'') <- flow, l' == end] 
@@ -61,5 +62,5 @@ class (Ord property, Show property) => Analysis analysis property | analysis -> 
                                         else solve' analysis program worklistTail contexts
                              in solve' analysis program worklist contexts
 
---visualize           :: analysis -> Program -> String -> IO ()
---    visualizeSteps      :: analysis -> Program -> String -> IO ()
+    visualize           :: analysis -> Program -> String -> IO ()
+
