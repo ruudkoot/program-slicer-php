@@ -11,6 +11,7 @@ import qualified PHP.Simple.SimpleAst as S
 
 import qualified MF.Program as P
 import MF.ProgramSlicing
+import MF.Analysis
 
 import qualified Data.IntMap as IM
 import qualified Data.Set as Set
@@ -30,9 +31,9 @@ main = do   (file:_) <- getArgs
             let tree::S.Program
                 tree = toSimple $ doParse inp
                 program = S.program tree
-            P.visualizeProgram (takeBaseName file) program
+                analysis = backwardsProgramSlicing program
+            visualizeSlice program (takeBaseName file) 
             print "Visualized"        
-            print $ backwardsProgramSlicing program
 
 printLabels::IM.IntMap P.Statement -> IO ()
 printLabels = mapM_ (\(n,s) -> putStrLn (show n ++ ": "++show s)).IM.toList

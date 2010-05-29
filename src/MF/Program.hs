@@ -113,20 +113,22 @@ instance Show Value where
     show (Var val)          = val
 
 visualizeProgram::String -> Program -> IO ()
-visualizeProgram f p = 
-    let 
-        nodes = map (\(l,n) -> (l, n))$ IM.toList $ blocks p
-        edges = map (\(i,e) -> (i,e,())) $ flow p
+visualizeProgram = visualizeProgramWInfo decorateNode
+    where decorateNode (l, n) = [GV.Label (GV.StrLabel (show l ++ ":" ++ show n))]
+
+visualizeProgramWInfo::(G.LNode Statement -> GV.Attributes) -> String -> Program -> IO ()
+visualizeProgramWInfo nfunc fil prog = 
+    let nodes = map (\(l,n) -> (l, n))$ IM.toList $ blocks prog
+        edges = map (\(i,e) -> (i,e,())) $ flow prog
         g::G.Gr Statement ()
         g = G.mkGraph  nodes edges
-
-        decorateNode (l, n) = [GV.Label (GV.StrLabel (show l ++ ":" ++ show n))]
-        clusterNode (n,c) = foldr (\(lc,ec) r -> if S.member n ec then GV.C lc r else r) (GV.N (n,c)) (IM.toList (rangeOfInfluence p))
+        
+        clusterNode (n,c) = foldr (\(lc,ec) r -> if S.member n ec then GV.C lc r else r) (GV.N (n,c)) (IM.toList (rangeOfInfluence prog))
         
         graphAtts = [GV.GraphAttrs
                      [GV.Aspect (GV.RatioOnly 1.3)
                      , GV.Concentrate True
-                     , GV.Root (GV.NodeName (show (startLabel p)))]]
-        dotted = GV.clusterGraphToDot True g graphAtts clusterNode (Just. GV.Int) (const []) decorateNode (const [])
-    in do GV.runGraphvizCommand GV.dirCommand dotted GV.Jpeg (f++".jpg")
+                     , GV.Root (GV.NodeName (show (startLabel prog)))]]
+        dotted = GV.clusterGraphToDot True g graphAtts clusterNode (Just. GV.Int) (const []) nfunc (const [])
+    in do GV.runGraphvizCommand GV.dirCommand dotted GV.Jpeg (fil++".jpg")
           return ()

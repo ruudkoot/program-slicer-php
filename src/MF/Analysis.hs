@@ -12,6 +12,9 @@ import qualified Data.Set   as Set
 import MF.Program
 import Debug.Trace
 
+import qualified Data.Graph.Inductive as G
+import qualified Data.GraphViz as GV
+
 type Worklist         = [(Label, Label)]
 type Context property = Map.IntMap (Set.Set property)
 
@@ -62,5 +65,12 @@ class (Ord property, Show property) => Analysis analysis property | analysis -> 
                                         else solve' analysis program worklistTail contexts
                              in solve' analysis program worklist contexts
 
-    visualize           :: analysis -> Program -> String -> IO ()
-
+fixPoint::(Eq a) => (a -> a) -> a -> a
+fixPoint f a | a == na   = a
+             | otherwise = fixPoint f na
+                where na = f a
+        
+visualizeWContexts::(Show property) => Context property -> Program -> String -> IO ()
+visualizeWContexts contexts program file = 
+    let decorateNode (l, n) = [GV.Label (GV.StrLabel (show l ++ ":" ++ show n++" -- "++(show . Set.toList . fromJust .Map.lookup l $ contexts)))]
+    in visualizeProgramWInfo decorateNode file program
