@@ -13,10 +13,10 @@ import qualified Data.GraphViz as GV
 
 
 type SlicingContext = (Set.Set Label --Set of relevant statements
-                      ,Context SymbolType)   --Context with variables
+                      ,LabelProperties SymbolType)   --Context with variables
 
 -- | Calculate control statements that are directly relevant to their respective variables
-directlyRelevantStatements :: Program -> Context SymbolType -> Set.Set Label 
+directlyRelevantStatements :: Program -> LabelProperties SymbolType -> Set.Set Label 
 directlyRelevantStatements program relevantVariables = Set.fromList $ map fst $ filter isRelevant (flow program)
         where
                 isRelevant :: (Label, Label) -> Bool
@@ -55,7 +55,7 @@ internalBackwardsProgramSlicing program (relevantStatements, relevantVariables) 
         
                 newRelevantVariables  = foldl union relevantVariables $ Set.toList branchStatements
                         where
-                                union :: Context SymbolType -> Label -> Context SymbolType
+                                union :: LabelProperties SymbolType -> Label -> LabelProperties SymbolType
                                 union left right = Map.unionWith Set.union left $ (transferAll analysis) program $ solve analysis program
                                         where
                                                 analysis = DirectlyRelevantVariables right $ referenced $ statementAt program right               
