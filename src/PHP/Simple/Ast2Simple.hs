@@ -29,7 +29,8 @@ fStat (StmtBreak _ _ _)             = St.Break
 fStat (StmtContinue  _ _ _)         = St.Continue
 
 fStat (StmtFuncDef (Func _ _ nm (WSCap _ args _) blc)) 
-                                    = let args' = either (const []) (map unparse) args 
+                                    = let extractArg (WSCap _ arg _)= (unparse arg, isJust (funcArgRef arg))
+                                          args' = either (const []) (map extractArg) args 
                                       in St.FuncDef nm args' (fB2Stat blc)
 fStat (StmtEcho exps _)             = St.Expr $ St.Func "echo" (map (fExpr.wsCapMain) exps)
 fStat (StmtReturn _ exp _)          = St.Return $ maybe (St.Const "Nothing") (fExpr.fst) exp

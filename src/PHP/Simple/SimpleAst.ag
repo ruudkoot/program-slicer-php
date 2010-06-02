@@ -40,7 +40,7 @@ DATA Statement
     | Break
     | Continue
 
-    | FuncDef   name:String args:{[String]} block:StatementList
+    | FuncDef   name:String args:{[(String,Bool)]} block:StatementList
     | Return    exp:Expression
 DERIVING Statement: Eq, Show
 
@@ -64,11 +64,9 @@ ATTR All [|labels USE {`IM.union`} {IM.empty}: {IM.IntMap P.Statement} --Map of 
 ATTR Inner [exit   :Int --Holds value where to go when done with a block.            
             cont   :Int --Label where to go for continue
             break  :Int --Label where to go when brak
-            inFunc :String --Label in which function we are
-            defs: {M.Map String Int} --Function definitions, used for lookup of function call
-            rets: {M.Map String [Int]} --List of return statement labels for a certain function, call locations.
+            funcs  :{M.Map String (Int, Int)} --Defined functions 
            |labelcount:Int --Incrementor for labels
-           |]
+           |funcDefs USE {`M.union`} {M.empty} : {M.Map String (Int, Int)} ] --Collect defined functions
 
 --Unique labels for all in loc.label
 SEM Statement
@@ -128,17 +126,16 @@ SEM Statement
                 +flow   = ([(@loc.label, @thn.entry) --Add flow for then and else block
                            ,(@loc.label, @els.entry)]++)
 
-    | Return    +labels = IM.insert @loc.label (P.Return (P.Val . P.Var $ @exp.myvar))
-                    --Return flows to all return labels of calling functions in the program.
-                +flow   = ((map (\to -> (@loc.label, to)) (M.findWithDefault [] @lhs.inFunc @lhs.rets))++)
+    | Return    +labels = IM.insert @loc.label (P.Assign "@return" (P.Val . P.Var $ @exp.myvar) "")
+                +flow   = ((@loc.label, @lhs.exit):) 
 
     | FuncDef   +labels = IM.union (IM.fromList [(@loc.label   , P.FuncIn @name @args)
-                                                ,(@loc.retLabel, P.Return (P.Val . P.Const $ "Nothing"))])
-                +flow   = (((@loc.label, @block.entry) : 
-                            map (\to -> (@loc.retLabel, to)) (M.findWithDefault [] @name @lhs.rets)) ++) --Flow form function entry to block
+                                                ,(@loc.retLabel, P.Return)])
+                +flow   = ((@loc.label, @block.entry):)
+                            
                 lhs.entry    = @lhs.exit --FuncDef = no-op (entry=exit)
                 block.exit   = @loc.retLabel --A function block has no exit value
-                block.inFunc = @name                
+                +funcDefs    = M.insert @name (@loc.label, @loc.retLabel)
 
     | Break Continue --Just run these statements
                 lhs.entry   = @loc.label
@@ -163,7 +160,7 @@ ATTR ExpressionList [||varlist: {[String]}]   --List of vars generated for expre
 
 SEM Expression    --Labels
     | BinOp UnaryOp Const Func TernaryIf
-                loc.expvar  = "$_"++show @loc.label       
+                loc.expvar  = "@"++show @loc.label       
     | BinOp Const Func TernaryIf
                 lhs.myvar   = @loc.expvar
 
@@ -196,7 +193,8 @@ SEM Expression    --Labels
     | Func      +labels   = IM.union (IM.fromList [( @loc.label   , P.FuncCall @name @args.varlist), 
                                                    ( @loc.labelOut, P.FuncBack @name @loc.expvar)])
 
-                +flow   = ([(@loc.label, M.findWithDefault (-1) @name @lhs.defs) --Call function
+                +flow   = ([(@loc.label, fst (M.findWithDefault (-1,-1) @name @lhs.funcs))    --Call function
+                           ,(snd (M.findWithDefault (-1,-1) @name @lhs.funcs), @loc.labelOut) --Return from function
                            ,(@loc.labelOut, @lhs.exit) --Back to out flow
                            ,(@loc.label, @loc.labelOut)]++) --Call to Back flow
                 
@@ -238,30 +236,27 @@ SEM Statement
 
 --Setup Program
 SEM Program
-    | Program   stats.defs  = defMap @stats.labels
-                stats.rets  = retMap @stats.labels
+    | Program   stats.funcs = @stats.funcDefs
                 stats.exit  = -1
                 stats.cont  = -1
                 stats.break = -1
                 stats.labelcount = 0
-                stats.inFunc = "main"          
+
+--Interprocedural flow
+ATTR All [||ipf USE {++} {[]}: {[(Int,Int,Int,Int)]}]
+
+SEM Expression
+    |Func +ipf = ((@loc.label
+                  ,fst (M.findWithDefault (-1,-1) @name @lhs.funcs)
+                  ,snd (M.findWithDefault (-1,-1) @name @lhs.funcs)
+                  ,@loc.labelOut):)
+
 {
 --Convert unary to binary
 unarySideEffect::String -> String -> String -> P.Statement
 unarySideEffect v vn "++" = P.Assign v (P.Val (P.Const "1")) "+"
 unarySideEffect v vn "--" = P.Assign v (P.Val (P.Const "1")) "-"
 unarySideEffect v vn op   = P.Assign vn (P.UnaryOp (P.Var v) op) ""
-
-
-defMap :: IM.IntMap P.Statement -> M.Map String Int
-defMap = foldr f M.empty . IM.toList
-    where f (i, P.FuncIn n as) m = M.insert n i m
-          f _                  m = m
-
-retMap :: IM.IntMap P.Statement -> M.Map String [Int]
-retMap = foldr f M.empty . IM.toList
-    where f (i, P.FuncBack n as) m = M.insertWith (++) n [i] m
-          f _                    m = m
 
 nextUnique :: Int -> (Int, Int)
 nextUnique u = (u+1, u)
@@ -286,6 +281,9 @@ entry slist = entry_Syn_Program $ wrap_Program (sem_Program slist) inh
 roi::Program -> IM.IntMap (S.Set Int)
 roi slist = roi_Syn_Program $ wrap_Program (sem_Program slist) inh
 
+ipf::Program -> [(Int,Int,Int,Int)]
+ipf slist = ipf_Syn_Program $ wrap_Program (sem_Program slist) inh
+
 program::Program -> P.Program
 program p = let res = wrap_Program (sem_Program p) inh
             in P.Program
@@ -293,6 +291,7 @@ program p = let res = wrap_Program (sem_Program p) inh
                 ,P.flow   = filterFlow $ flow_Syn_Program res
                 ,P.startLabel  = entry_Syn_Program res
                 ,P.finalLabels   = []
-                ,P.rangeOfInfluence = roi_Syn_Program res}
+                ,P.rangeOfInfluence = roi_Syn_Program res
+                ,P.interProceduralFlow = ipf_Syn_Program res}
 
 }

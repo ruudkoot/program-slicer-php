@@ -20,8 +20,11 @@ data Program = Program
         , startLabel    :: Label
         , finalLabels   :: [Label]
         , rangeOfInfluence :: IM.IntMap (S.Set Label)
+        , interProceduralFlow :: [(Int,Int,Int,Int)]
         }
 
+type FuncArg = (String, --Variable name
+                Bool)   --Reference?
 data Statement =
       Assign    {var::String, exp::Expression, aop::String}
     | Expr      {exp::Expression}
@@ -32,12 +35,12 @@ data Statement =
     | Continue
 
 --Function call
-    | FuncCall  {name::String,args::[String]}
+    | FuncCall  {name::String,callArgs::[String]}
     | FuncBack  {name::String,var::String}
 
 --Function definition
-    | FuncIn    {name::String, args::[String]}
-    | Return    {exp::Expression}
+    | FuncIn    {name::String,inArgs::[FuncArg]}
+    | Return
     deriving (Eq,Ord)
 
 data Expression =
@@ -100,8 +103,8 @@ instance Show Statement where
     show (FuncCall n a) = "call:"++n++"("++concat (intersperse "," a)++")"
     show (FuncBack n v) = "back: "++n++":"++v
 
-    show (FuncIn n as)  = "def:"++n++"("++concat (intersperse "," as)++")"
-    show (Return e)     = "return "++show e
+    show (FuncIn n as)  = "def:"++n++"("++concat (intersperse "," (map fst as))++")"
+    show Return         = "return"
     
 instance Show Expression where
     show (BinOp l op r)     = show l ++op++ show r

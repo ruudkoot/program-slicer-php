@@ -1,5 +1,6 @@
 <?
 
+/*
 function abc($a,$b,$c)
 {
     $d = $b*$b-4.0*$a*$c;
@@ -34,5 +35,17 @@ function powerFor($base,$exp)
 
 $a = powerFor(4,5);
 $b = powerRec(4,5);
+*/
+
+function retTest($a)
+{
+    if($a==0)
+        return 5;
+    else
+        return 4;
+}
+
+retTest($a);
+
 trace($a);
 ?>
