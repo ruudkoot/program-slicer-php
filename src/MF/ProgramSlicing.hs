@@ -6,34 +6,60 @@ import MF.Program
 import MF.Analysis
 
 import Data.Maybe
-import qualified Data.IntMap as Map
+import qualified Data.IntMap as IM
+import qualified Data.Map as    Map
 
 import qualified Data.Graph.Inductive as G
 import qualified Data.GraphViz as GV
 
 
-type SlicingContext = (Set.Set Label --Set of relevant statements
-                      ,LabelProperties SymbolType)   --Context with variables
+type SlicingContext = (Map.Map CallContext (Set.Set Label) --Set of relevant statements
+                      ,Values SymbolType)   --Context with variables
+
+-- type CallContext            = [Label]
+-- type LabelValues property   = Map.Map CallContext (Set.Set property)       
+-- type Values property        = IM.IntMap (LabelValues property)
+
 
 -- | Calculate control statements that are directly relevant to their respective variables
-directlyRelevantStatements :: Program -> LabelProperties SymbolType -> Set.Set Label 
+directlyRelevantStatements :: Program -> Values SymbolType -> Set.Set Label
 directlyRelevantStatements program relevantVariables = Set.fromList $ map fst $ filter isRelevant (flow program)
         where
                 isRelevant :: (Label, Label) -> Bool
                 isRelevant (i,j) = (not . Set.null) $ Set.intersection a b
                         where 
                                 a :: Set.Set SymbolType 
-                                a = fromJust (Map.lookup j relevantVariables)
+                                a = Set.unions $ Map.elems $ fromJust (IM.lookup j relevantVariables)
+                                
+                                b :: Set.Set SymbolType 
+                                b = modified (statementAt program i)
+
+
+directlyRelevantStatements :: Program -> Values SymbolType -> M.Map CallContext (Set.Set Label)
+directlyRelevantStatements program relevantVariables = Map.fromList (map (\context -> (context, forEachContext context)) callContexts
+        where
+                callContexts = Set.fromList $ contexts relevantVariables
+                
+                forEachContext :: CallContext ->  Set.Set Label
+                forEachContext context = Set.fromList $ map fst $ filter isRelevant (flow program)
+                    where
+                        isRelevant :: (Label, Label) -> Bool
+                        isRelevant (i,j) = (not . Set.null) $ Set.intersection a b
+                            where 
+                                a :: Set.Set SymbolType 
+                                a = fromJust (M.lookup context (fromJust (IM.lookup j relevantVariables)))
                                 
                                 b :: Set.Set SymbolType 
                                 b = modified (statementAt program i)
                                 
+
 -- | Determine which control statements are relevant to the existing relevant statements
-controlDependentBranchStatements :: Program -> Set.Set Label -> Set.Set Label
-controlDependentBranchStatements program relevantStatements = Set.fromList $ Map.keys $ Map.filter inRange (rangeOfInfluence program)
+controlDependentBranchStatements :: Program -> M.Map CallContext (Set.Set Label) -> M.Map CallContext (Set.Set Label)
+controlDependentBranchStatements program = M.map forEachContext
         where
-                inRange :: Set.Set Label -> Bool
-                inRange range = (not . Set.null) $ Set.intersection range relevantStatements                
+                forEachContext releventStatements = Map.keysSet $ Map.filter inRange (rangeOfInfluence program)
+                    where  inRange :: Set.Set Label -> Bool
+                                inRange relevant range = (not . Set.null) $ Set.intersection range relevantStatements
 
 --The actual slicing
 backwardsProgramSlicing :: Program -> SlicingContext
@@ -41,10 +67,12 @@ backwardsProgramSlicing program = fixPoint (internalBackwardsProgramSlicing prog
         where   --TODO: Extend to multiple trace statements
                 (startLabel, startValue) = head.Map.toList $ traceStatements program
 
-                analysis = DirectlyRelevantVariables startLabel startValue
+                 analysis = DirectlyRelevantVariables startLabel startValue
                 
                 --Start with the directly relevant variables and their statements
-                relevantVariables = (transferAll analysis) program (solve analysis program)
+                values = startValues analysis program
+
+                relevantVariables = (transferAll analysis) program (solve analysis program values)
                 relevantStatements = directlyRelevantStatements program relevantVariables 
 
 -- Fixpoint function to progress looking for a fixpoint which contians all the control statements.
@@ -55,7 +83,7 @@ internalBackwardsProgramSlicing program (relevantStatements, relevantVariables) 
         
                 newRelevantVariables  = foldl union relevantVariables $ Set.toList branchStatements
                         where
-                                union :: LabelProperties SymbolType -> Label -> LabelProperties SymbolType
+                                union :: Values SymbolType -> Label -> Values    SymbolType
                                 union left right = Map.unionWith Set.union left $ (transferAll analysis) program $ solve analysis program
                                         where
                                                 analysis = DirectlyRelevantVariables right $ referenced $ statementAt program right               
