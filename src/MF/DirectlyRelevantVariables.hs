@@ -1,5 +1,4 @@
 {-# LANGUAGE MultiParamTypeClasses  #-}
-{-# LANGUAGE FunctionalDependencies #-}
 {-# LANGUAGE TypeSynonymInstances   #-}
 {-# LANGUAGE ScopedTypeVariables    #-}
 
