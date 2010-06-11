@@ -21,21 +21,12 @@ type CallContext            = [Label]
 type LabelValues property   = Map.Map CallContext (Set.Set property)       
 type Values property        = IM.IntMap (LabelValues property)
 
+
 contexts :: Values property -> Set.Set CallContext
 contexts = Set.unions . IM.elems . IM.map Map.keysSet
 
 class (Ord property, Show property, Eq property) => Analysis analysis property | analysis -> property where
-    flowSelection          :: analysis -> Program -> Flow
-
-    startValues            :: analysis -> Program -> Values property
-    startValues analysis program = IM.mapWithKey (\l _ -> Map.singleton [] (extremalValueAt analysis l program)) (blocks program)    
-    
-    extremalLabels         :: analysis -> Program -> [Label]
-    extremalValue          :: analysis -> Set.Set property
-    extremalValueAt        :: analysis -> Label -> Program -> Set.Set property
-    extremalValueAt analysis label program | isExtremalLabel = extremalValue analysis
-                                           | otherwise       = Set.empty
-                                                where isExtremalLabel = label `elem` extremalLabels analysis program       
+    flowSelection          :: analysis -> Program -> Flow     
 
     join                   :: analysis -> Set.Set property -> Set.Set property -> Set.Set property
     isMoreInformative      :: analysis -> Set.Set property -> Set.Set property -> Bool
@@ -52,6 +43,12 @@ class (Ord property, Show property, Eq property) => Analysis analysis property |
                     --toEffect :: Label -> Set.Set property -> Set.Set property
                     toEffect label = Map.map (transfer analysis (statementAt program label))
 
+    mergeValues             :: analysis -> Values property -> Values property -> Values property
+    mergeValues analysis = IM.unionWith mergeLabelValues
+        where 
+                mergeLabelValues = Map.unionWith (join analysis)
+
+
     solve :: analysis -> Program -> Values property -> Values property
     solve analysis program values = 
                  let flow     = flowSelection analysis program
@@ -61,12 +58,12 @@ class (Ord property, Show property, Eq property) => Analysis analysis property |
                      solve' analysis program [] values = values
                      solve' analysis program ((start, end):worklistTail) values = 
                          let    --Calculate new values for effect of start 
-                                contextStart    = fromJust (IM.lookup start values)
+                                contextStart    = maybe (error "contextStart") id (IM.lookup start values)
                                 statementStart  = statementAt program start
                                 newEffectStart  = Map.map (transfer analysis statementStart) contextStart
                                 
                                 --Calculate new context values for the end block
-                                oldContextEnd   = fromJust (IM.lookup end values)        
+                                oldContextEnd   = maybe (error $ "contexEnd"++show end++show values) id (IM.lookup end values)        
                                 ajoin           = Map.unionWith (join analysis)
                                 newContextEnd   = oldContextEnd `ajoin` newEffectStart
                              
@@ -79,6 +76,11 @@ class (Ord property, Show property, Eq property) => Analysis analysis property |
                             else solve' analysis program worklistTail values
 
                  in solve' analysis program worklist values
+
+{-
+forEachContext :: (Label -> a -> b) -> Values a -> Values b
+forEachContext func = IM.mapWithKey (\lab context -> Map.map (func lab) context)
+-}
 
 fixPoint::(Eq a) => (a -> a) -> a -> a
 fixPoint f a | a == na   = a

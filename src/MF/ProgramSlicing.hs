@@ -52,7 +52,7 @@ directlyRelevantStatements program relevantVariables = Map.fromList (map (\conte
                         isRelevant (i,j) = (not . Set.null) $ Set.intersection a b
                             where 
                                 a :: Set.Set SymbolType 
-                                a = fromJust (Map.lookup context (fromJust (IM.lookup j relevantVariables)))
+                                a = maybe (error "firstRelevant") id (Map.lookup context (maybe (error "secondRelevant") id (IM.lookup j relevantVariables)))
                                 
                                 b :: Set.Set SymbolType 
                                 b = modified (statementAt program i)
@@ -70,18 +70,13 @@ controlDependentBranchStatements program = Map.map forEachContext
 backwardsProgramSlicing :: Program -> SlicingContext
 backwardsProgramSlicing program = fixPoint (internalBackwardsProgramSlicing program) (relevantStatements,relevantVariables)
         where   --TODO: Extend to multiple trace statements
-                (startLabel, startValue) = head.IM.toList $ traceStatements program
+                startValues = buildSlicingEnvironment program
 
-                analysis = DirectlyRelevantVariables startLabel startValue
-                
-                --Start with the directly relevant variables and their statements
-                values = startValues analysis program
-
-                relevantVariables = (transferAll analysis) program (solve analysis program values)
-                relevantStatements = directlyRelevantStatements program relevantVariables 
+                relevantVariables = solve DirectlyRelevantVariables program startValues
+                relevantStatements = directlyRelevantStatements program (transferAll DirectlyRelevantVariables program relevantVariables) 
 
 -- Fixpoint function to progress looking for a fixpoint which contians all the control statements.
-internalBackwardsProgramSlicing :: Program -> SlicingContext -> SlicingContext
+
 
 {-
 internalBackwardsProgramSlicing program (relevantStatements, relevantVariables) = (newRelevantStatements, newRelevantVariables)
@@ -98,8 +93,30 @@ internalBackwardsProgramSlicing program (relevantStatements, relevantVariables) 
                 newRelevantStatements = Set.union branchStatements $ directlyRelevantStatements program newRelevantVariables          
 -}
 
-internalBackwardsProgramSlicing program (relevantStatements, relevantVariables) = undefined
+insertControlStatements :: Program -> Map.Map CallContext (Set.Set Label) -> Values SymbolType
+insertControlStatements program ctx = Map.foldWithKey traverseContext IM.empty ctx
+    where traverseContext callcontext labels vs = Set.fold traverseEnv vs labels
+            where traverseEnv label vs = let newValues = Map.singleton callcontext (referenced $ statementAt program label)         
+                                         in IM.insertWith Map.union label newValues vs 
+                                         
+internalBackwardsProgramSlicing :: Program -> SlicingContext -> SlicingContext                             
+internalBackwardsProgramSlicing program (relevantStatements, relevantVariables) = (newRelevantStatements, newRelevantVariables)
+         where  --Calculate the new control-dependant statements
+                branchStatements = controlDependentBranchStatements program relevantStatements
+               
+               
+                intermediateRelevantVariables = insertControlStatements program branchStatements
+                newRelevantVariables = solve DirectlyRelevantVariables program $ mergeValues DirectlyRelevantVariables relevantVariables intermediateRelevantVariables
+                
+                newRelevantStatements = Map.unionWith Set.union branchStatements $ directlyRelevantStatements program (transferAll DirectlyRelevantVariables program  newRelevantVariables)
+                
+               
 
+buildSlicingEnvironment :: Program -> Values SymbolType
+buildSlicingEnvironment program = foldr ins IM.empty (labels program)
+    where statements = traceStatements program
+          ins l v = IM.insert l (Map.singleton [] (IM.findWithDefault Set.empty l statements)) v
+                    
 -- |Produces a list of calls to the trace function and the associated variables.
 traceStatements :: Program -> IM.IntMap (Set.Set SymbolType)
 traceStatements = IM.foldWithKey f (IM.empty) . blocks
@@ -107,23 +124,20 @@ traceStatements = IM.foldWithKey f (IM.empty) . blocks
         f l (FuncCall "trace" vars) r = IM.insert l (Set.fromList vars) r
         f _ _                       r = r
 
-
+                                
 visualizeSlice::Program -> String -> IO ()
-{-
 visualizeSlice program file = 
     let traces = traceStatements program
         (statements,contexts) = backwardsProgramSlicing program
         traceColor = GV.FillColor (GV.RGB 255 0 0)
         useColor   = GV.FillColor (GV.RGB 0   255 0)
         noneColor  = GV.FillColor (GV.RGB 128 128 128)
-        decorateNode (l, n) = [GV.Label (GV.StrLabel (show l ++ ":" ++ show n++" -- "++(show . Set.toList . fromJust .IM.lookup l $ contexts)))
+        decorateNode (l, n) = [GV.Label (GV.StrLabel (show l ++ ":" ++ show n++" -- "++(show . IM.lookup l $ contexts)))
                               ,GV.Style [GV.SItem GV.Filled []]
-                              ,if Map.member l traces
+                              ,if IM.member l traces
                                then traceColor
-                               else if Set.member l statements
-                                    then useColor
-                                    else noneColor]
+                               else useColor
+                               ]
     in visualizeProgramWInfo decorateNode file program
--}
-visualizeSlice program file = undefined
+
 

@@ -34,7 +34,7 @@ main = do   (file:_) <- getArgs
                 analysis = backwardsProgramSlicing program
             visualizeSlice program (takeBaseName file) 
             print "Visualized"
-            print (S.ipf tree)        
+            --print analysis        
 
 printLabels::IM.IntMap P.Statement -> IO ()
 printLabels = mapM_ (\(n,s) -> putStrLn (show n ++ ": "++show s)).IM.toList
