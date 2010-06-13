@@ -1,23 +1,21 @@
 module MF.ProgramSlicing where
 
+import MF.Analysis
 import MF.DirectlyRelevantVariables
 import MF.Program
-import MF.Analysis
 
-import Data.Maybe
-
-import qualified Data.Set as Set
-import qualified Data.Map as    Map
+import           Data.Maybe
+import qualified Data.Set    as Set
+import qualified Data.Map    as Map
 import qualified Data.IntSet as IntSet
-import qualified Data.IntMap as IM
-
+import qualified Data.IntMap as IntMap
 
 import qualified Data.Graph.Inductive as G
-import qualified Data.GraphViz as GV
+import qualified Data.GraphViz        as GV
 
 type Statements     = Map.Map CallContext (Set.Set Label)
-type SlicingContext = (Statements --Set of relevant statements
-                      ,Values SymbolType)   --Context with variables
+type SlicingContext = ( Statements          -- set of relevant statements
+                      , Values SymbolType ) -- context with variables
 
 directlyRelevantStatements :: Program -> Values SymbolType -> Statements
 directlyRelevantStatements program relevantVariables = Map.fromList (map (\context -> (context, forEachContext context)) callContexts)
@@ -29,7 +27,7 @@ directlyRelevantStatements program relevantVariables = Map.fromList (map (\conte
                     where
                         isRelevant (i,j) = (not . Set.null) $ Set.intersection a b
                             where 
-                                a = fromJust (Map.lookup context (fromJust (IM.lookup j relevantVariables)))
+                                a = fromJust (Map.lookup context (fromJust (IntMap.lookup j relevantVariables)))
                                 b = modified (statementAt program i)
                                 
 
@@ -37,7 +35,7 @@ directlyRelevantStatements program relevantVariables = Map.fromList (map (\conte
 controlDependentBranchStatements :: Program -> Statements -> Statements
 controlDependentBranchStatements program = Map.map forEachContext
         where   forEachContext :: Set.Set Label -> Set.Set Label
-                forEachContext relevantStatements = Set.fromList $ IntSet.toList $ IM.keysSet $ IM.filter inRange (rangeOfInfluence program)
+                forEachContext relevantStatements = Set.fromList $ IntSet.toList $ IntMap.keysSet $ IntMap.filter inRange (rangeOfInfluence program)
                     where  inRange :: Set.Set Label -> Bool
                            inRange range = (not . Set.null) $ Set.intersection range relevantStatements
 
@@ -51,10 +49,10 @@ backwardsProgramSlicing program = fixPoint (internalBackwardsProgramSlicing prog
                 relevantStatements = directlyRelevantStatements program (transferAll DirectlyRelevantVariables program relevantVariables) 
 
 insertControlStatements :: Program -> Map.Map CallContext (Set.Set Label) -> Values SymbolType
-insertControlStatements program ctx = Map.foldWithKey traverseContext IM.empty ctx
+insertControlStatements program ctx = Map.foldWithKey traverseContext IntMap.empty ctx
     where traverseContext callcontext labels vs = Set.fold traverseEnv vs labels
             where traverseEnv label vs = let newValues = Map.singleton callcontext (referenced $ statementAt program label)         
-                                         in IM.insertWith Map.union label newValues vs 
+                                         in IntMap.insertWith Map.union label newValues vs 
                                          
 internalBackwardsProgramSlicing :: Program -> SlicingContext -> SlicingContext                             
 internalBackwardsProgramSlicing program (relevantStatements, relevantVariables) = (newRelevantStatements, newRelevantVariables)
@@ -70,15 +68,15 @@ internalBackwardsProgramSlicing program (relevantStatements, relevantVariables) 
             
                
 buildSlicingEnvironment :: Program -> Values SymbolType
-buildSlicingEnvironment program = foldr ins IM.empty (labels program)
+buildSlicingEnvironment program = foldr ins IntMap.empty (labels program)
     where statements = traceStatements program
-          ins l v = IM.insert l (Map.singleton [] (IM.findWithDefault Set.empty l statements)) v
+          ins l v = IntMap.insert l (Map.singleton [] (IntMap.findWithDefault Set.empty l statements)) v
                     
 -- |Produces a list of calls to the trace function and the associated variables.
-traceStatements :: Program -> IM.IntMap (Set.Set SymbolType)
-traceStatements = IM.foldWithKey f (IM.empty) . blocks
+traceStatements :: Program -> IntMap.IntMap (Set.Set SymbolType)
+traceStatements = IntMap.foldWithKey f (IntMap.empty) . blocks
     where
-        f l (FuncCall "trace" vars) r = IM.insert l (Set.fromList vars) r
+        f l (FuncCall "trace" vars) r = IntMap.insert l (Set.fromList vars) r
         f _ _                       r = r
 
 allStatements::Statements -> Set.Set Label
@@ -92,9 +90,9 @@ visualizeSlice program file =
         traceColor = GV.FillColor (GV.RGB 255 0 0)
         useColor   = GV.FillColor (GV.RGB 0   255 0)
         noneColor  = GV.FillColor (GV.RGB 128 128 128)
-        decorateNode (l, n) = [GV.Label (GV.StrLabel (show l ++ ":" ++ show n++" -- "++(show . Map.toList . fromJust . IM.lookup l $ contexts)))
+        decorateNode (l, n) = [GV.Label (GV.StrLabel (show l ++ ":" ++ show n++" -- "++(show . Map.toList . fromJust . IntMap.lookup l $ contexts)))
                               ,GV.Style [GV.SItem GV.Filled []]
-                              ,if IM.member l traces
+                              ,if IntMap.member l traces
                                then traceColor
                                else if Set.member l usedStatements
                                     then useColor
