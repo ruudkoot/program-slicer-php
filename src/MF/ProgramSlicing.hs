@@ -17,61 +17,58 @@ type Statements     = Map.Map CallContext (Set.Set Label)
 type SlicingContext = ( Statements          -- set of relevant statements
                       , Values SymbolType ) -- context with variables
 
-directlyRelevantStatements :: Program -> Values SymbolType -> Statements
-directlyRelevantStatements program relevantVariables = Map.fromList (map (\context -> (context, forEachContext context)) callContexts)
-        where
-                callContexts = Set.toList $ contexts relevantVariables
-            
-                forEachContext :: CallContext ->  Set.Set Label
-                forEachContext context = Set.fromList $ map fst $ filter isRelevant (flow program)
-                    where
-                        isRelevant (i,j) = (not . Set.null) $ Set.intersection a b
-                            where 
-                                a = fromJust (Map.lookup context (fromJust (IntMap.lookup j relevantVariables)))
-                                b = modified (statementAt program i)
-                                
-
--- | Determine which control statements are relevant to the existing relevant statements
-controlDependentBranchStatements :: Program -> Statements -> Statements
-controlDependentBranchStatements program = Map.map forEachContext
-        where   forEachContext :: Set.Set Label -> Set.Set Label
-                forEachContext relevantStatements = Set.fromList $ IntSet.toList $ IntMap.keysSet $ IntMap.filter inRange (rangeOfInfluence program)
-                    where  inRange :: Set.Set Label -> Bool
-                           inRange range = (not . Set.null) $ Set.intersection range relevantStatements
-
---The actual slicing
+-- | The actual slicing
 backwardsProgramSlicing :: Program -> SlicingContext
-backwardsProgramSlicing program = fixPoint (internalBackwardsProgramSlicing program) (relevantStatements,relevantVariables)
-        where 
-                startValues = buildSlicingEnvironment program
+backwardsProgramSlicing program =
+    let relevantVariables  = let startValues = buildSlicingEnvironment program
+                              in solve DirectlyRelevantVariables program startValues
+        relevantStatements = directlyRelevantStatements program (transferAll DirectlyRelevantVariables program relevantVariables) 
+     in fixPoint (internalBackwardsProgramSlicing program) (relevantStatements, relevantVariables)
 
-                relevantVariables = solve DirectlyRelevantVariables program startValues
-                relevantStatements = directlyRelevantStatements program (transferAll DirectlyRelevantVariables program relevantVariables) 
+        where buildSlicingEnvironment :: Program -> Values SymbolType
+              buildSlicingEnvironment program = foldr ins IntMap.empty (labels program)
+               where statements = traceStatements program
+                     ins l v    = IntMap.insert l (Map.singleton [] (IntMap.findWithDefault Set.empty l statements)) v
+        
+              directlyRelevantStatements :: Program -> Values SymbolType -> Statements
+              directlyRelevantStatements program relevantVariables = Map.fromList (map (\context -> (context, forEachContext context)) callContexts)
+                      where
+                              callContexts = Set.toList $ contexts relevantVariables
+                          
+                              forEachContext :: CallContext ->  Set.Set Label
+                              forEachContext context = Set.fromList $ map fst $ filter isRelevant (flow program)
+                                  where
+                                      isRelevant (i,j) = (not . Set.null) $ Set.intersection a b
+                                          where 
+                                              a = fromJust (Map.lookup context (fromJust (IntMap.lookup j relevantVariables)))
+                                              b = modified (statementAt program i)
 
-insertControlStatements :: Program -> Map.Map CallContext (Set.Set Label) -> Values SymbolType
-insertControlStatements program ctx = Map.foldWithKey traverseContext IntMap.empty ctx
-    where traverseContext callcontext labels vs = Set.fold traverseEnv vs labels
-            where traverseEnv label vs = let newValues = Map.singleton callcontext (referenced $ statementAt program label)         
-                                         in IntMap.insertWith Map.union label newValues vs 
-                                         
-internalBackwardsProgramSlicing :: Program -> SlicingContext -> SlicingContext                             
-internalBackwardsProgramSlicing program (relevantStatements, relevantVariables) = (newRelevantStatements, newRelevantVariables)
-     where  --Calculate the new control-dependant statements
-            branchStatements = controlDependentBranchStatements program relevantStatements          
-           
-            intermediateRelevantVariables = insertControlStatements program branchStatements
-            newRelevantVariables = solve DirectlyRelevantVariables program $ 
-                                           mergeValues DirectlyRelevantVariables relevantVariables intermediateRelevantVariables
-            
-            newRelevantStatements = Map.unionWith Set.union branchStatements $ 
-                                           directlyRelevantStatements program (transferAll DirectlyRelevantVariables program  newRelevantVariables)
-            
-               
-buildSlicingEnvironment :: Program -> Values SymbolType
-buildSlicingEnvironment program = foldr ins IntMap.empty (labels program)
-    where statements = traceStatements program
-          ins l v = IntMap.insert l (Map.singleton [] (IntMap.findWithDefault Set.empty l statements)) v
-                    
+              internalBackwardsProgramSlicing :: Program -> SlicingContext -> SlicingContext                             
+              internalBackwardsProgramSlicing program (relevantStatements, relevantVariables) =
+                let --Calculate the new control-dependant statements
+                    branchStatements              = controlDependentBranchStatements program relevantStatements          
+                    intermediateRelevantVariables = insertControlStatements program branchStatements
+                    newRelevantVariables          = solve DirectlyRelevantVariables program $ 
+                                                        mergeValues DirectlyRelevantVariables relevantVariables intermediateRelevantVariables
+                    newRelevantStatements         = Map.unionWith Set.union branchStatements $ 
+                                                        directlyRelevantStatements program (transferAll DirectlyRelevantVariables program  newRelevantVariables)
+                 in (newRelevantStatements, newRelevantVariables)
+
+                where -- | Determine which control statements are relevant to the existing relevant statements
+                      controlDependentBranchStatements :: Program -> Statements -> Statements
+                      controlDependentBranchStatements program = Map.map forEachContext
+                              where   forEachContext :: Set.Set Label -> Set.Set Label
+                                      forEachContext relevantStatements = Set.fromList $ IntSet.toList $ IntMap.keysSet $ IntMap.filter inRange (rangeOfInfluence program)
+                                          where  inRange :: Set.Set Label -> Bool
+                                                 inRange range = (not . Set.null) $ Set.intersection range relevantStatements
+                                               
+                      insertControlStatements :: Program -> Map.Map CallContext (Set.Set Label) -> Values SymbolType
+                      insertControlStatements program ctx = Map.foldWithKey traverseContext IntMap.empty ctx
+                          where traverseContext callcontext labels vs = Set.fold traverseEnv vs labels
+                                  where traverseEnv label vs = let newValues = Map.singleton callcontext (referenced $ statementAt program label)         
+                                                                in IntMap.insertWith Map.union label newValues vs 
+
+
 -- |Produces a list of calls to the trace function and the associated variables.
 traceStatements :: Program -> IntMap.IntMap (Set.Set SymbolType)
 traceStatements = IntMap.foldWithKey f (IntMap.empty) . blocks
