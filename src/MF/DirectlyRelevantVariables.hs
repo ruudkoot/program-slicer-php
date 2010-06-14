@@ -8,7 +8,6 @@ import           Data.Maybe
 import qualified Data.Set as Set
 
 import MF.Program
-
 import MF.Analysis
 
 data DirectlyRelevantVariables = DirectlyRelevantVariables
@@ -28,7 +27,9 @@ instance Analysis DirectlyRelevantVariables SymbolType where
                                           else rest
     
     transferFuncMerge _ = Set.union
-        
+    
+    cutoff _ = 2
+    
     kill     _ statement _      = modified statement                  
     generate _ statement input  | Set.null (input `Set.intersection` (modified statement))  = Set.empty
                                 | otherwise                                                 = referenced statement

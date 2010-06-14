@@ -24,9 +24,7 @@ backwardsProgramSlicing program =
      in fixPoint (internalBackwardsProgramSlicing program) (relevantStatements, relevantVariables)
 
         where buildSlicingEnvironment :: Program -> Values SymbolType
-              buildSlicingEnvironment program = foldr ins Map.empty (labels program)
-               where statements = traceStatements program
-                     ins l v    = Map.insert l (Map.singleton [] (Map.findWithDefault Set.empty l statements)) v
+              buildSlicingEnvironment program = Map.map (Map.singleton []) (traceStatements program)
         
               directlyRelevantStatements :: Program -> Values SymbolType -> Statements
               directlyRelevantStatements program relevantVariables = Map.fromList (map (\context -> (context, forEachContext context)) callContexts)
@@ -38,7 +36,7 @@ backwardsProgramSlicing program =
                                   where
                                       isRelevant (i,j) = (not . Set.null) $ Set.intersection a b
                                           where 
-                                              a = maybe Set.empty id (Map.lookup context (fromJust (Map.lookup j relevantVariables)))
+                                              a = contextValues context $ labelValues j relevantVariables
                                               b = modified (statementAt program i)
 
               internalBackwardsProgramSlicing :: Program -> SlicingContext -> SlicingContext                             
@@ -85,7 +83,7 @@ visualizeSlice program file =
         traceColor = GV.FillColor (GV.RGB 255 0 0)
         useColor   = GV.FillColor (GV.RGB 0   255 0)
         noneColor  = GV.FillColor (GV.RGB 128 128 128)
-        decorateNode (l, n) = [GV.Label (GV.StrLabel (show l ++ ":" ++ show n++" -- "++(show . Map.toList . fromJust . Map.lookup l $ contexts)))
+        decorateNode (l, n) = [GV.Label (GV.StrLabel (show l ++ ":" ++ show n++" -- "++(show . Map.toList . labelValues l $ contexts)))
                               ,GV.Style [GV.SItem GV.Filled []]
                               ,if Map.member l traces
                                then traceColor

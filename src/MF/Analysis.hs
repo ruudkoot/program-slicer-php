@@ -20,9 +20,15 @@ type CallContext            = [Label]
 type LabelValues property   = Map.Map CallContext (Set.Set property)       
 type Values property        = Map.Map Label (LabelValues property)
 
-
 contexts :: Values property -> Set.Set CallContext
 contexts = Set.unions . Map.elems . Map.map Map.keysSet
+
+labelValues :: Label -> Values property -> LabelValues property
+labelValues lab vals = maybe Map.empty id $ Map.lookup lab vals
+
+contextValues :: CallContext -> LabelValues property -> Set.Set property
+contextValues cont vals = maybe Set.empty id $ Map.lookup cont vals
+
 
 class (Ord property, Show property, Eq property) => Analysis analysis property | analysis -> property where
     flowSelection          :: analysis -> Program -> Flow     
@@ -32,8 +38,6 @@ class (Ord property, Show property, Eq property) => Analysis analysis property |
     kill                   :: analysis -> Statement -> Set.Set property -> Set.Set property
     generate               :: analysis -> Statement -> Set.Set property -> Set.Set property
     
-
-
 --Transfers intra-procedural flow statements
     transfer               :: analysis -> Statement -> Set.Set property -> Set.Set property
     transfer          analysis statement input = (input `Set.difference` (kill analysis statement input)) `Set.union` (generate analysis statement input)
@@ -65,13 +69,19 @@ class (Ord property, Show property, Eq property) => Analysis analysis property |
     mergeCallContexts analysis = Map.unionWith (transferFuncMerge analysis)
 
     changeContextsIn :: analysis -> Program -> Label -> LabelValues property -> LabelValues property
-    changeContextsIn analysis program l = Map.mapKeys (l:) . Map.map (transferParametersIn analysis  (ipfParameters program l))
+    changeContextsIn analysis program l = cutoffRecursion analysis. Map.mapKeys (l:) . Map.map (transferParametersIn analysis  (ipfParameters program l))
 
     changeContextsOut :: analysis -> Program -> Label -> LabelValues property -> LabelValues property
     changeContextsOut analysis program l  = Map.foldWithKey f Map.empty . Map.map (transferParametersOut analysis  (ipfParameters program l))
                             where f (c:cs) vals new | c == l     = Map.insert cs vals new
                                                     | otherwise  = new
                                   f []     vals new              = new       
+    
+    cutoff :: analysis -> Int
+
+    cutoffRecursion :: analysis -> LabelValues property -> LabelValues property
+    cutoffRecursion analysis = Map.foldWithKey cfunc Map.empty
+        where cfunc callcontext = Map.insertWith (join analysis) (take (cutoff analysis) callcontext)
 
 --FCall gets on call stack!
     solve :: analysis -> Program -> Values property -> Values property
@@ -83,11 +93,11 @@ class (Ord property, Show property, Eq property) => Analysis analysis property |
              solve' [] values = values
              solve' ((start, end):worklistTail) values = 
                  let statementStart  = statementAt program start
-                     contextStart    = maybe (error "contextStart") id $ Map.lookup start values                     
+                     contextStart    = labelValues start values                     
                      effectStart  = Map.map (transfer analysis statementStart) contextStart
                      
                      statementEnd    = statementAt program end                     
-                     oldContextEnd   = fromJust $ Map.lookup end values   
+                     oldContextEnd   = labelValues end values   
                      --Calculate new context values for the end block
                      
                      ajoin           = Map.unionWith (join analysis)
@@ -96,13 +106,13 @@ class (Ord property, Show property, Eq property) => Analysis analysis property |
                      ipfContext::Statement -> Statement -> LabelValues property   
                      ipfContext (FuncIn _ _) (FuncCall _ _) =
                         let (call,_,_,back) = ipfByCall end program
-                            funcBackContext = maybe (error "funcBackcontext") id $ Map.lookup back values
+                            funcBackContext = labelValues back values
                             funcInEffect = changeContextsOut analysis program call contextStart 
                         in mergeCallContexts analysis funcBackContext funcInEffect   
 
                      ipfContext (FuncBack _ _) (FuncCall _ _) = 
                         let (call,_,_,back) = ipfByCall end program
-                            funcInContext = maybe (error "funcIn") id $ Map.lookup back values
+                            funcInContext = labelValues back values
                             funcInEffect = changeContextsOut analysis program call funcInContext 
                         in mergeCallContexts analysis contextStart funcInEffect   
                      

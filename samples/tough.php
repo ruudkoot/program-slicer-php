@@ -16,15 +16,16 @@ function abc($a,$b,$c)
     }
     
     echo $x0, $x1;
-}
+}*/
 
-abc(1.0,2.0,4.0);
+//abc(1.0,2.0,4.0);
 
 function powerRec($base,$exp)
 {
     return ($exp==0)?1:powerRec($base,$exp-1);
 }
 
+/*
 function powerFor($base,$exp)
 {
     $ret = 1;
@@ -33,10 +34,10 @@ function powerFor($base,$exp)
     return $ret;
 }
 
-$a = powerFor(4,5);
+$a = powerFor(4,5);*/
 $b = powerRec(4,5);
-*/
 
+/*
 function retTest($a)
 {
     if($a==0)
@@ -46,6 +47,7 @@ function retTest($a)
 }
 
 retTest($a);
+*/
 
-trace($a);
+trace($b);
 ?>
