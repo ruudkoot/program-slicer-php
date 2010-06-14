@@ -5,8 +5,7 @@
 module MF.DirectlyRelevantVariables where
 
 import           Data.Maybe
-import qualified Data.IntMap    as Map
-import qualified Data.Set       as Set
+import qualified Data.Set as Set
 
 import MF.Program
 

@@ -3,11 +3,9 @@ MODULE {PHP.Simple.SimpleAst}
 
 {
 import Data.List
-import qualified Data.Set as S
-import qualified Data.IntMap as IM
-import qualified Data.Map as M
+import qualified Data.Set as Set
+import qualified Data.Map as Map
 import qualified MF.Program as P
-import Debug.Trace
 }
 
 PRAGMA genlinepragmas
@@ -56,17 +54,17 @@ SET Inner      = Statements Expressions --Only inner part of the program (everyt
 
 SET All        = Inner Program --Entire program
 
-ATTR All [|labels USE {`IM.union`} {IM.empty}: {IM.IntMap P.Statement} --Map of labels
-          |entry :Int                       --Entry label to code block
+ATTR All [|labels USE {`Map.union`} {Map.empty}: {Map.Map P.Label P.Statement} --Map of labels
+          |entry : {P.Label}                      --Entry label to code block
            flow USE {++} {[]}: {[(Int,Int)]} --Accumulated flow graph
           ]    
 
-ATTR Inner [exit   :Int --Holds value where to go when done with a block.            
-            cont   :Int --Label where to go for continue
-            break  :Int --Label where to go when brak
-            funcs  :{M.Map String (Int, Int)} --Defined functions 
+ATTR Inner [exit   :{P.Label} --Holds value where to go when done with a block.            
+            cont   :{P.Label} --P.Label where to go for continue
+            break  :{P.Label} --P.Label where to go when brak
+            funcs  :{Map.Map String (P.Label, P.Label)} --Defined functions 
            |labelcount:Int --Incrementor for labels
-           |funcDefs USE {`M.union`} {M.empty} : {M.Map String (Int, Int)} ] --Collect defined functions
+           |funcDefs USE {`Map.union`} {Map.empty} : {Map.Map String (P.Label, P.Label)} ] --Collect defined functions
 
 --Unique labels for all in loc.label
 SEM Statement
@@ -101,14 +99,14 @@ SEM Statement
                 lhs.entry   = @exp.entry
                 exp.exit    = @loc.label
 
-    | While     +labels = IM.insert @loc.label (P.While (P.Val . P.Var $ @exp.myvar))
+    | While     +labels = Map.insert @loc.label (P.While (P.Val . P.Var $ @exp.myvar))
                 +flow   = ([(@loc.label, @lhs.exit) --To exit
                            ,(@loc.label, @block.entry)]++) --Flow to inner block
                 block.exit  = @exp.entry --Set inherited attributes for while block
                 block.cont  = @exp.entry
                 block.break = @lhs.exit
 
-    | For       +labels = IM.insert @loc.label (P.While (P.Val . P.Var $ @stop.myvar))
+    | For       +labels = Map.insert @loc.label (P.While (P.Val . P.Var $ @stop.myvar))
                 +flow   = ([(@loc.label, @lhs.exit)
                            ,(@loc.label, @block.entry)]++)
                 
@@ -122,26 +120,26 @@ SEM Statement
                 
                 inc.exit    = @stop.entry
 
-    | If        +labels = IM.insert @loc.label (P.If (P.Val . P.Var $ @exp.myvar))
+    | If        +labels = Map.insert @loc.label (P.If (P.Val . P.Var $ @exp.myvar))
                 +flow   = ([(@loc.label, @thn.entry) --Add flow for then and else block
                            ,(@loc.label, @els.entry)]++)
 
-    | Return    +labels = IM.insert @loc.label (P.Assign "@return" (P.Val . P.Var $ @exp.myvar) "")
+    | Return    +labels = Map.insert @loc.label (P.Assign "@return" (P.Val . P.Var $ @exp.myvar) "")
                 +flow   = ((@loc.label, @lhs.exit):) 
 
-    | FuncDef   +labels = IM.union (IM.fromList [(@loc.label   , P.FuncIn @name (@args++[("@return",True)]))
-                                                ,(@loc.retLabel, P.Return)])
+    | FuncDef   +labels = Map.union (Map.fromList [(@loc.label   , P.FuncIn @name (@args++[("@return",True)]))
+                                                  ,(@loc.retLabel, P.Return)])
                 +flow   = ((@loc.label, @block.entry):)
                             
                 lhs.entry    = @lhs.exit --FuncDef = no-op (entry=exit)
                 block.exit   = @loc.retLabel --A function block has no exit value
-                +funcDefs    = M.insert @name (@loc.label, @loc.retLabel)
+                +funcDefs    = Map.insert @name (@loc.label, @loc.retLabel)
 
     | Break Continue --Just run these statements
                 lhs.entry   = @loc.label
 
-    | Break     +labels = IM.insert @loc.label P.Break
-    | Continue  +labels = IM.insert @loc.label P.Continue
+    | Break     +labels = Map.insert @loc.label P.Break
+    | Continue  +labels = Map.insert @loc.label P.Continue
     
 --Wire the statements through a code block
 SEM StatementList
@@ -164,14 +162,14 @@ SEM Expression    --Labels
     | BinOp Const Func TernaryIf
                 lhs.myvar   = @loc.expvar
 
-    | BinOp     +labels     = IM.insert @loc.label (P.Assign @loc.expvar (P.BinOp (P.Var @left.myvar) @op (P.Var @right.myvar)) "")
+    | BinOp     +labels     = Map.insert @loc.label (P.Assign @loc.expvar (P.BinOp (P.Var @left.myvar) @op (P.Var @right.myvar)) "")
                 +flow       = ((@loc.label, @lhs.exit):) --Flow through
 
                 lhs.entry   = @left.entry --Wire through
                 left.exit   = @right.entry
                 right.exit  = @loc.label
 
-    | UnaryOp   +labels     = IM.insert @loc.label $ unarySideEffect @exp.myvar @loc.expvar @op
+    | UnaryOp   +labels     = Map.insert @loc.label $ unarySideEffect @exp.myvar @loc.expvar @op
                 +flow       = ((@loc.label, @lhs.exit):) --Flow through
                 lhs.entry   = @exp.entry
                 exp.exit    = @loc.label
@@ -180,28 +178,28 @@ SEM Expression    --Labels
     | Var       lhs.entry   = @lhs.exit --Wire through
                 lhs.myvar   = @value               
 
-    | Const     +labels     = IM.insert @loc.label (P.Assign @loc.expvar (P.Val .P.Const $ @value) "")
+    | Const     +labels     = Map.insert @loc.label (P.Assign @loc.expvar (P.Val .P.Const $ @value) "")
                 +flow       = ((@loc.label, @lhs.exit):) --Flow through
                 lhs.entry   = @loc.label
 
-    | Assign    +labels     = IM.insert @loc.label (P.Assign @var (P.Val . P.Var $ @exp.myvar) @op)
+    | Assign    +labels     = Map.insert @loc.label (P.Assign @var (P.Val . P.Var $ @exp.myvar) @op)
                 +flow       = ((@loc.label, @lhs.exit):) --Flow through
                 lhs.entry   = @exp.entry --Wire through
                 exp.exit    = @loc.label
                 lhs.myvar   = @var --Represented by variable
 
-    | Func      +labels   = IM.union (IM.fromList [( @loc.label   , P.FuncCall @name (@args.varlist ++ [@loc.expvar])), 
-                                                   ( @loc.labelOut, P.FuncBack @name @loc.expvar)])
+    | Func      +labels   = Map.union (Map.fromList [( @loc.label   , P.FuncCall @name (@args.varlist ++ [@loc.expvar])), 
+                                                     ( @loc.labelOut, P.FuncBack @name @loc.expvar)])
 
-                +flow   = ([(@loc.label, fst (M.findWithDefault (-1,-1) @name @lhs.funcs))    --Call function
-                           ,(snd (M.findWithDefault (-1,-1) @name @lhs.funcs), @loc.labelOut) --Return from function
+                +flow   = ([(@loc.label, fst (Map.findWithDefault (-1,-1) @name @lhs.funcs))    --Call function
+                           ,(snd (Map.findWithDefault (-1,-1) @name @lhs.funcs), @loc.labelOut) --Return from function
                            ,(@loc.labelOut, @lhs.exit) --Back to out flow
                            ,(@loc.label, @loc.labelOut)]++) --Call to Back flow
                 
                 lhs.entry   = @args.entry --Wire function call through aruments
                 args.exit   = @loc.label 
     
-    | TernaryIf +labels = IM.union (IM.fromList 
+    | TernaryIf +labels = Map.union (Map.fromList 
                             [( @loc.label, (P.If (P.Val . P.Var $ @cond.myvar)))
                             ,( @loc.thenLabel, (P.Assign @loc.expvar (P.Val . P.Var $ @thn.myvar) ""))
                             ,( @loc.elseLabel, (P.Assign @loc.expvar (P.Val . P.Var $ @els.myvar) ""))])
@@ -226,13 +224,13 @@ SEM ExpressionList --Labels
                 hd.exit     = @tl.entry
 
 --Range of influence
-ATTR All [||roi USE {`IM.union`} {IM.empty}:{IM.IntMap (S.Set Int)}]
+ATTR All [||roi USE {`Map.union`} {Map.empty}:{Map.Map P.Label (Set.Set P.Label)}]
 
 SEM Statement
-    | While     +roi = IM.insert @loc.label (S.fromList (IM.keys @block.labels))
-    | For       +roi = IM.insert @loc.label (S.fromList (IM.keys @block.labels))
-    | If        +roi = IM.insert @loc.label (S.fromList (IM.keys @thn.labels ++ IM.keys @els.labels))
-    | FuncDef   +roi = IM.insert @loc.label (S.fromList ((@loc.retLabel : IM.keys  @block.labels)))
+    | While     +roi = Map.insert @loc.label (Set.fromList (Map.keys @block.labels))
+    | For       +roi = Map.insert @loc.label (Set.fromList (Map.keys @block.labels))
+    | If        +roi = Map.insert @loc.label (Set.fromList (Map.keys @thn.labels ++ Map.keys @els.labels))
+    | FuncDef   +roi = Map.insert @loc.label (Set.fromList ((@loc.retLabel : Map.keys  @block.labels)))
 
 --Setup Program
 SEM Program
@@ -243,12 +241,12 @@ SEM Program
                 stats.labelcount = 0
 
 --Interprocedural flow
-ATTR All [||ipf USE {++} {[]}: {[(Int,Int,Int,Int)]}]
+ATTR All [||ipf USE {++} {[]}: {[P.Ipf]}]
 
 SEM Expression
     |Func +ipf = ((@loc.label
-                  ,fst (M.findWithDefault (-1,-1) @name @lhs.funcs)
-                  ,snd (M.findWithDefault (-1,-1) @name @lhs.funcs)
+                  ,fst (Map.findWithDefault (-1,-1) @name @lhs.funcs)
+                  ,snd (Map.findWithDefault (-1,-1) @name @lhs.funcs)
                   ,@loc.labelOut):)
 
 {
@@ -258,33 +256,33 @@ unarySideEffect v vn "++" = P.Assign v (P.Val (P.Const "1")) "+"
 unarySideEffect v vn "--" = P.Assign v (P.Val (P.Const "1")) "-"
 unarySideEffect v vn op   = P.Assign vn (P.UnaryOp (P.Var v) op) ""
 
-nextUnique :: Int -> (Int, Int)
+nextUnique :: P.Label -> (P.Label, P.Label)
 nextUnique u = (u+1, u)
 
 inh::Inh_Program
 inh = Inh_Program
-      {labels_Inh_Program = IM.empty
+      {labels_Inh_Program = Map.empty
       }
 
-labels::Program -> IM.IntMap P.Statement
+labels::Program -> Map.Map P.Label P.Statement
 labels slist = labels_Syn_Program $ wrap_Program (sem_Program slist) inh
 
-filterFlow::[(Int,Int)] -> [(Int,Int)]
+filterFlow::P.Flow -> P.Flow
 filterFlow = filter (\(i,t) -> i /= -1 && t /= -1)
 
-flow::Program -> [(Int,Int)]
+flow::Program -> [(P.Label,P.Label)]
 flow slist = filterFlow $ flow_Syn_Program $ wrap_Program (sem_Program slist) inh
 
-entry::Program -> Int
+entry::Program -> P.Label
 entry slist = entry_Syn_Program $ wrap_Program (sem_Program slist) inh
 
-roi::Program -> IM.IntMap (S.Set Int)
+roi::Program -> Map.Map P.Label (Set.Set P.Label)
 roi slist = roi_Syn_Program $ wrap_Program (sem_Program slist) inh
 
-filterIpf::[(Int,Int,Int,Int)] -> [(Int,Int,Int,Int)]
+filterIpf::[P.Ipf] -> [P.Ipf]
 filterIpf = filter (\(a,b,c,d) -> a /= -1 && b /= -1 && c /= -1 && d /= -1)
 
-ipf::Program -> [(Int,Int,Int,Int)]
+ipf::Program -> [P.Ipf]
 ipf slist = ipf_Syn_Program $ wrap_Program (sem_Program slist) inh
 
 program::Program -> P.Program

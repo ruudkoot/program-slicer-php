@@ -1,7 +1,7 @@
 module MF.Program where
 
-import qualified Data.Set as S
-import qualified Data.IntMap as IM
+import qualified Data.Set as Set
+import qualified Data.Map as Map
 import Data.Monoid
 import Data.List
 
@@ -17,11 +17,11 @@ type IpfParameter = (String,String,Bool) --Actual parameter, formalparameter, re
 type SymbolType = String
 
 data Program = Program 
-        { blocks        :: IM.IntMap Statement
+        { blocks        :: Map.Map Label Statement
         , flow          :: Flow
         , startLabel    :: Label
         , finalLabels   :: [Label]
-        , rangeOfInfluence :: IM.IntMap (S.Set Label)
+        , rangeOfInfluence :: Map.Map Label (Set.Set Label)
         , interProceduralFlow :: [(Label,Label,Label,Label)]
         }
 
@@ -58,29 +58,29 @@ data Value =
     deriving (Eq,Ord)
 
 --Functions on statements
-freeVar::Value -> S.Set SymbolType
-freeVar (Var v) = S.singleton v
-freeVar (Const _) = S.empty
+freeVar::Value -> Set.Set SymbolType
+freeVar (Var v) = Set.singleton v
+freeVar (Const _) = Set.empty
 
-freeVariables::Expression -> S.Set SymbolType
-freeVariables (BinOp l _ r) = freeVar l `S.union` freeVar r
+freeVariables::Expression -> Set.Set SymbolType
+freeVariables (BinOp l _ r) = freeVar l `Set.union` freeVar r
 freeVariables (UnaryOp e _) = freeVar e
 freeVariables (Val v)       = freeVar v
 
 
-modified :: Statement -> S.Set SymbolType
-modified (Assign c expr _)= S.singleton c
-modified (FuncBack _ v)   = S.singleton v
-modified _                = S.empty
+modified :: Statement -> Set.Set SymbolType
+modified (Assign c expr _)= Set.singleton c
+modified (FuncBack _ v)   = Set.singleton v
+modified _                = Set.empty
 
 
-referenced :: Statement -> S.Set SymbolType
+referenced :: Statement -> Set.Set SymbolType
 referenced (Assign c expr _)= freeVariables expr
 referenced (Expr expr)      = freeVariables expr 
 referenced (While expr)     = freeVariables expr
 referenced (If expr)        = freeVariables expr
-referenced (FuncCall _ vars)= S.fromList vars
-referenced _                = S.empty
+referenced (FuncCall _ vars)= Set.fromList vars
+referenced _                = Set.empty
 
 ipfByCall :: Label -> Program -> Ipf
 ipfByCall c = maybe (error "ipfByCall") id . find (\(s, _, _, _) -> s == c) . interProceduralFlow
@@ -100,10 +100,10 @@ ipfParameters program call =
                                                     
 -- Geef een lijst terug met alle labels in het programma
 labels :: Program -> [Label]
-labels = IM.keys . blocks
+labels = Map.keys . blocks
 
 statementAt :: Program -> Label -> Statement
-statementAt program label = maybe (error "statementAt") id $ IM.lookup label (blocks program) 
+statementAt program label = maybe (error "statementAt") id $ Map.lookup label (blocks program) 
 
 reverseFlow :: Flow -> Flow
 reverseFlow = map (\(x,y) -> (y,x))
@@ -138,12 +138,12 @@ visualizeProgram = visualizeProgramWInfo decorateNode
 
 visualizeProgramWInfo::(G.LNode Statement -> GV.Attributes) -> String -> Program -> IO ()
 visualizeProgramWInfo nfunc fil prog = 
-    let nodes = map (\(l,n) -> (l, n))$ IM.toList $ blocks prog
+    let nodes = map (\(l,n) -> (l, n))$ Map.toList $ blocks prog
         edges = map (\(i,e) -> (i,e,())) $ flow prog
         g::G.Gr Statement ()
         g = G.mkGraph  nodes edges
         
-        clusterNode (n,c) = foldr (\(lc,ec) r -> if S.member n ec then GV.C lc r else r) (GV.N (n,c)) (IM.toList (rangeOfInfluence prog))
+        clusterNode (n,c) = foldr (\(lc,ec) r -> if Set.member n ec then GV.C lc r else r) (GV.N (n,c)) (Map.toList (rangeOfInfluence prog))
         
         graphAtts = [GV.GraphAttrs
                      [GV.Aspect (GV.RatioOnly 1.3)
