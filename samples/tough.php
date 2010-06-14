@@ -22,7 +22,10 @@ function abc($a,$b,$c)
 
 function powerRec($base,$exp)
 {
-    return ($exp==0)?1:powerRec($base,$exp-1);
+    if($exp == 0)
+        return 1;
+    else 
+        return powerRec($base,$exp-1);
 }
 
 /*
@@ -35,7 +38,9 @@ function powerFor($base,$exp)
 }
 
 $a = powerFor(4,5);*/
-$b = powerRec(4,5);
+$v1=4;
+$v2=5;
+$b = powerRec($v1,$v2);
 
 /*
 function retTest($a)

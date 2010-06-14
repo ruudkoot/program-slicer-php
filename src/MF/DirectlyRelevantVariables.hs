@@ -22,7 +22,7 @@ instance Analysis DirectlyRelevantVariables SymbolType where
                                          else rest
 
     transferParametersOut  _ ipfparams old = foldr varfunc Set.empty ipfparams
-        where varfunc (c, i, ref) rest = if ref && Set.member i old
+        where varfunc (c, i, ref) rest = if Set.member i old
                                           then Set.insert c rest 
                                           else rest
     
@@ -30,7 +30,16 @@ instance Analysis DirectlyRelevantVariables SymbolType where
     
     cutoff _ = 2
     
+    kill     _ (FuncCall _ _) _ = Set.empty
+    kill     _ (FuncIn _ _) _   = Set.empty
+    kill     _ (FuncBack _ ) _  = Set.empty
+    kill     _ (Return) _       = Set.empty
     kill     _ statement _      = modified statement                  
+    
+    generate _ (FuncCall _ _) _ = Set.empty
+    generate _ (FuncIn _ _) _   = Set.empty
+    generate _ (FuncBack _ ) _  = Set.empty
+    generate _ (Return) _       = Set.empty
     generate _ statement input  | Set.null (input `Set.intersection` (modified statement))  = Set.empty
                                 | otherwise                                                 = referenced statement
           

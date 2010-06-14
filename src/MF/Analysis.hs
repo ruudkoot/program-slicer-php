@@ -110,13 +110,13 @@ class (Ord property, Show property, Eq property) => Analysis analysis property |
                             funcInEffect = changeContextsOut analysis program call contextStart 
                         in mergeCallContexts analysis funcBackContext funcInEffect   
 
-                     ipfContext (FuncBack _ _) (FuncCall _ _) = 
+                     ipfContext (FuncBack _ ) (FuncCall _ _) = 
                         let (call,_,_,back) = ipfByCall end program
                             funcInContext = labelValues back values
                             funcInEffect = changeContextsOut analysis program call funcInContext 
                         in mergeCallContexts analysis contextStart funcInEffect   
                      
-                     ipfContext (FuncBack _ _) Return  =
+                     ipfContext (FuncBack _ ) Return  =
                         let (call,_,_,back) = ipfByBack start program
                             funcBackEffect = changeContextsIn analysis program call contextStart
                         in oldContextEnd `ajoin` funcBackEffect

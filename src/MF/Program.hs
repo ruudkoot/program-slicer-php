@@ -38,7 +38,7 @@ data Statement =
 
 --Function call
     | FuncCall  {name::String,callArgs::[String]}
-    | FuncBack  {name::String,var::String}
+    | FuncBack  {name::String}
 
 --Function definition
     | FuncIn    {name::String,inArgs::[FuncArg]}
@@ -70,7 +70,6 @@ freeVariables (Val v)       = freeVar v
 
 modified :: Statement -> Set.Set SymbolType
 modified (Assign c expr _)= Set.singleton c
-modified (FuncBack _ v)   = Set.singleton v
 modified _                = Set.empty
 
 
@@ -79,7 +78,6 @@ referenced (Assign c expr _)= freeVariables expr
 referenced (Expr expr)      = freeVariables expr 
 referenced (While expr)     = freeVariables expr
 referenced (If expr)        = freeVariables expr
-referenced (FuncCall _ vars)= Set.fromList vars
 referenced _                = Set.empty
 
 ipfByCall :: Label -> Program -> Ipf
@@ -118,7 +116,7 @@ instance Show Statement where
     show (Continue)     = "continue"
 
     show (FuncCall n a) = "call:"++n++"("++concat (intersperse "," a)++")"
-    show (FuncBack n v) = "back: "++n++":"++v
+    show (FuncBack n) = "back: "++n
 
     show (FuncIn n as)  = "def:"++n++"("++concat (intersperse "," (map fst as))++")"
     show Return         = "return"

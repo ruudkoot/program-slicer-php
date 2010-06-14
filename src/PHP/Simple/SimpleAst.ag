@@ -189,7 +189,7 @@ SEM Expression    --Labels
                 lhs.myvar   = @var --Represented by variable
 
     | Func      +labels   = Map.union (Map.fromList [( @loc.label   , P.FuncCall @name (@args.varlist ++ [@loc.expvar])), 
-                                                     ( @loc.labelOut, P.FuncBack @name @loc.expvar)])
+                                                     ( @loc.labelOut, P.FuncBack @name)])
 
                 +flow   = ([(@loc.label, fst (Map.findWithDefault (-1,-1) @name @lhs.funcs))    --Call function
                            ,(snd (Map.findWithDefault (-1,-1) @name @lhs.funcs), @loc.labelOut) --Return from function
