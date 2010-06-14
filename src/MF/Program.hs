@@ -12,6 +12,8 @@ import Data.Maybe
 
 type Label = Int
 type Flow = [(Label, Label)]
+type Ipf  = (Label,Label,Label,Label) --call,in,return,back
+type IpfParameter = (String,String,Bool) --Actual parameter, formalparameter, reference
 type SymbolType = String
 
 data Program = Program 
@@ -20,7 +22,7 @@ data Program = Program
         , startLabel    :: Label
         , finalLabels   :: [Label]
         , rangeOfInfluence :: IM.IntMap (S.Set Label)
-        , interProceduralFlow :: [(Int,Int,Int,Int)]
+        , interProceduralFlow :: [(Label,Label,Label,Label)]
         }
 
 type FuncArg = (String, --Variable name
@@ -80,13 +82,28 @@ referenced (If expr)        = freeVariables expr
 referenced (FuncCall _ vars)= S.fromList vars
 referenced _                = S.empty
 
+ipfByCall :: Label -> Program -> Ipf
+ipfByCall c = maybe (error "ipfByCall") id . find (\(s, _, _, _) -> s == c) . interProceduralFlow
 
+ipfByBack :: Label -> Program -> Ipf
+ipfByBack b = maybe (error "ipfByBack") id . find (\(_, _, _, l) -> l == b) . interProceduralFlow
+
+inIpf :: Label -> Program -> Bool
+inIpf l = isJust . find (\(a,b,c,d) -> a == l || b ==  l || c == l || d == l) . interProceduralFlow
+
+ipfParameters :: Program -> Label -> [IpfParameter]
+ipfParameters program call = 
+    let (c,i,_,_) = ipfByCall call program
+        (FuncCall _ actual) = statementAt program c
+        (FuncIn _ formal) = statementAt program i
+    in zipWith (\ac (form, ref) -> (ac,form,ref)) actual formal
+                                                    
 -- Geef een lijst terug met alle labels in het programma
 labels :: Program -> [Label]
 labels = IM.keys . blocks
 
 statementAt :: Program -> Label -> Statement
-statementAt program label = fromJust $ IM.lookup label (blocks program) 
+statementAt program label = maybe (error "statementAt") id $ IM.lookup label (blocks program) 
 
 reverseFlow :: Flow -> Flow
 reverseFlow = map (\(x,y) -> (y,x))

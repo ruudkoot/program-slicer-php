@@ -129,7 +129,7 @@ SEM Statement
     | Return    +labels = IM.insert @loc.label (P.Assign "@return" (P.Val . P.Var $ @exp.myvar) "")
                 +flow   = ((@loc.label, @lhs.exit):) 
 
-    | FuncDef   +labels = IM.union (IM.fromList [(@loc.label   , P.FuncIn @name @args)
+    | FuncDef   +labels = IM.union (IM.fromList [(@loc.label   , P.FuncIn @name (@args++[("@return",True)]))
                                                 ,(@loc.retLabel, P.Return)])
                 +flow   = ((@loc.label, @block.entry):)
                             
@@ -190,7 +190,7 @@ SEM Expression    --Labels
                 exp.exit    = @loc.label
                 lhs.myvar   = @var --Represented by variable
 
-    | Func      +labels   = IM.union (IM.fromList [( @loc.label   , P.FuncCall @name @args.varlist), 
+    | Func      +labels   = IM.union (IM.fromList [( @loc.label   , P.FuncCall @name (@args.varlist ++ [@loc.expvar])), 
                                                    ( @loc.labelOut, P.FuncBack @name @loc.expvar)])
 
                 +flow   = ([(@loc.label, fst (M.findWithDefault (-1,-1) @name @lhs.funcs))    --Call function
@@ -281,6 +281,9 @@ entry slist = entry_Syn_Program $ wrap_Program (sem_Program slist) inh
 roi::Program -> IM.IntMap (S.Set Int)
 roi slist = roi_Syn_Program $ wrap_Program (sem_Program slist) inh
 
+filterIpf::[(Int,Int,Int,Int)] -> [(Int,Int,Int,Int)]
+filterIpf = filter (\(a,b,c,d) -> a /= -1 && b /= -1 && c /= -1 && d /= -1)
+
 ipf::Program -> [(Int,Int,Int,Int)]
 ipf slist = ipf_Syn_Program $ wrap_Program (sem_Program slist) inh
 
@@ -292,6 +295,6 @@ program p = let res = wrap_Program (sem_Program p) inh
                 ,P.startLabel  = entry_Syn_Program res
                 ,P.finalLabels   = []
                 ,P.rangeOfInfluence = roi_Syn_Program res
-                ,P.interProceduralFlow = ipf_Syn_Program res}
+                ,P.interProceduralFlow = filterIpf $ ipf_Syn_Program res}
 
 }

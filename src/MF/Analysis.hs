@@ -6,85 +6,161 @@
 module MF.Analysis where
 
 import           Data.Maybe
-import qualified Data.IntMap as IntMap
-import qualified Data.Map    as Map
-import qualified Data.Set    as Set
+import qualified Data.IntMap   as IM
+import qualified Data.Map      as Map
+import qualified Data.Set   as Set
 
 import MF.Program
 import Debug.Trace
 
 import qualified Data.Graph.Inductive as G
-import qualified Data.GraphViz        as GV
+import qualified Data.GraphViz as GV
 
-type Worklist             = [(Label, Label)]
-type CallContext          = [Label]
-type LabelValues property = Map.Map CallContext (Set.Set property)       
-type Values      property = IntMap.IntMap (LabelValues property)
+type Worklist               = [(Label, Label)]
+type CallContext            = [Label]
+type LabelValues property   = Map.Map CallContext (Set.Set property)       
+type Values property        = IM.IntMap (LabelValues property)
 
 
 contexts :: Values property -> Set.Set CallContext
-contexts = Set.unions . IntMap.elems . IntMap.map Map.keysSet
+contexts = Set.unions . IM.elems . IM.map Map.keysSet
 
-class (Ord property, Show property) => Analysis analysis property | analysis -> property where
+class (Ord property, Show property, Eq property) => Analysis analysis property | analysis -> property where
     flowSelection          :: analysis -> Program -> Flow     
+
     join                   :: analysis -> Set.Set property -> Set.Set property -> Set.Set property
-    isMoreInformative      :: analysis -> Set.Set property -> Set.Set property -> Bool
+
     kill                   :: analysis -> Statement -> Set.Set property -> Set.Set property
     generate               :: analysis -> Statement -> Set.Set property -> Set.Set property
+    
 
+
+--Transfers intra-procedural flow statements
     transfer               :: analysis -> Statement -> Set.Set property -> Set.Set property
-    transfer    analysis statement input  =
-        (input `Set.difference` (kill analysis statement input))
-            `Set.union`
-        (generate analysis statement input)
+    transfer          analysis statement input = (input `Set.difference` (kill analysis statement input)) `Set.union` (generate analysis statement input)
 
+--Moves the complete value-set to effect values
     transferAll            :: analysis -> Program -> Values property -> Values property
-    transferAll analysis program   values = IntMap.mapWithKey toEffect values
-        where toEffect label =
-                Map.map (transfer analysis (statementAt program label))
+    transferAll       analysis program values = IM.mapWithKey toEffect values
+            where
+                    --toEffect :: Label -> Set.Set property -> Set.Set property
+                    toEffect label = Map.map (transfer analysis (statementAt program label))
 
+--Transfer function between FuncBack and Return
+    transferParametersOut        :: analysis -> [IpfParameter] -> Set.Set property -> Set.Set property
+
+--Transfer function between FuncIn en Call
+    transferParametersIn         :: analysis -> [IpfParameter] -> Set.Set property -> Set.Set property
+
+--Merges result form function with local result
+    transferFuncMerge      :: analysis -> Set.Set property -> Set.Set property -> Set.Set property
+
+--Merges 2 value-sets
     mergeValues             :: analysis -> Values property -> Values property -> Values property
-    mergeValues analysis = IntMap.unionWith mergeLabelValues
-        where mergeLabelValues = Map.unionWith (join analysis)
+    mergeValues analysis = IM.unionWith mergeLabelValues
+        where 
+                mergeLabelValues = Map.unionWith (join analysis)
 
+--Merge calling contexts
+    mergeCallContexts :: analysis -> LabelValues property -> LabelValues property -> LabelValues property
+    mergeCallContexts analysis = Map.unionWith (transferFuncMerge analysis)
+
+    changeContextsIn :: analysis -> Program -> Label -> LabelValues property -> LabelValues property
+    changeContextsIn analysis program l = Map.mapKeys (l:) . Map.map (transferParametersIn analysis  (ipfParameters program l))
+
+    changeContextsOut :: analysis -> Program -> Label -> LabelValues property -> LabelValues property
+    changeContextsOut analysis program l  = Map.foldWithKey f Map.empty . Map.map (transferParametersOut analysis  (ipfParameters program l))
+                            where f (c:cs) vals new | c == l     = Map.insert cs vals new
+                                                    | otherwise  = new
+                                  f []     vals new              = new       
+
+--FCall gets on call stack!
     solve :: analysis -> Program -> Values property -> Values property
     solve analysis program values = 
-                 let worklist = flowSelection analysis program
+         let flow     = flowSelection analysis program
+             worklist = flow                     
+             
+             solve' :: Worklist -> Values property -> Values property  
+             solve' [] values = values
+             solve' ((start, end):worklistTail) values = 
+                 let statementStart  = statementAt program start
+                     contextStart    = maybe (error "contextStart") id $ IM.lookup start values                     
+                     effectStart  = Map.map (transfer analysis statementStart) contextStart
                      
-                     solve' :: analysis -> Program -> Worklist -> Values property -> Values property  
-                     solve' analysis program [] values = values
-                     solve' analysis program ((start, end):worklistTail) values = 
-                         let    --Calculate new values for effect of start 
-                                contextStart    = fromMaybe (error "contextStart") (IntMap.lookup start values)
-                                statementStart  = statementAt program start
-                                newEffectStart  = Map.map (transfer analysis statementStart) contextStart
-                                
-                                --Calculate new context values for the end block
-                                oldContextEnd   = fromMaybe (error $ "contexEnd"++show end++show values) (IntMap.lookup end values)        
-                                ajoin           = Map.unionWith (join analysis)
-                                newContextEnd   = oldContextEnd `ajoin` newEffectStart
-                             
-                                --Updated worklist/labelProperties
-                                newWorklist     = worklistTail ++ [(l', l'') | (l', l'') <- worklist, l' == end] 
-                                newContexts     = IntMap.insert end newContextEnd values
+                     statementEnd    = statementAt program end                     
+                     oldContextEnd   = fromJust $ IM.lookup end values   
+                     --Calculate new context values for the end block
+                     
+                     ajoin           = Map.unionWith (join analysis)
 
-                         in if (oldContextEnd /= newContextEnd) --Context value changed?
-                            then solve' analysis program newWorklist newContexts
-                            else solve' analysis program worklistTail values
+--Backwards slicing  
+                     ipfContext::Statement -> Statement -> LabelValues property   
+                     ipfContext (FuncIn _ _) (FuncCall _ _) =
+                        let (call,_,_,back) = ipfByCall end program
+                            funcBackContext = maybe (error "funcBackcontext") id $ IM.lookup back values
+                            funcInEffect = changeContextsOut analysis program call contextStart 
+                        in mergeCallContexts analysis funcBackContext funcInEffect   
 
-                 in solve' analysis program worklist values
+                     ipfContext (FuncBack _ _) (FuncCall _ _) = 
+                        let (call,_,_,back) = ipfByCall end program
+                            funcInContext = maybe (error "funcIn") id $ IM.lookup back values
+                            funcInEffect = changeContextsOut analysis program call funcInContext 
+                        in mergeCallContexts analysis contextStart funcInEffect   
+                     
+                     ipfContext (FuncBack _ _) Return  =
+                        let (call,_,_,back) = ipfByBack start program
+                            funcBackEffect = changeContextsIn analysis program call contextStart
+                        in oldContextEnd `ajoin` funcBackEffect
+
+                     ipfContext _              _           = oldContextEnd `ajoin` effectStart
+                     
+                     --Updated worklist/labelProperties
+                     newContextEnd   = if inIpf start program
+                                       then ipfContext statementStart statementEnd
+                                       else oldContextEnd `ajoin` effectStart
+
+                     newWorklist     = worklistTail ++ [(l', l'') | (l', l'') <- flow, l' == end] 
+                     newContexts     = IM.insert end newContextEnd values
+
+                 in if (oldContextEnd /= newContextEnd) --Context value changed?
+                    then solve' newWorklist newContexts
+                    else solve' worklistTail values
+
+             
+{-            solve' :: Worklist -> Values property -> Values property  
+             solve' [] values = values
+             solve' ((start, end):worklistTail) values = 
+                 let    --Calculate new values for effect of start 
+                        contextStart    = id (IM.lookup start values)
+                        statementStart  = statementAt program start
+                        newEffectStart  = Map.map (transfer analysis statementStart) contextStart
+                        
+                        --Calculate new context values for the end block
+                        oldContextEnd   = IM.lookup end values
+                        ajoin           = Map.unionWith (join analysis)
+                        newContextEnd   = oldContextEnd `ajoin` newEffectStart
+                     
+                        --Updated worklist/labelProperties
+                        newWorklist     = worklistTail ++ [(l', l'') | (l', l'') <- flow, l' == end] 
+                        newContexts     = IM.insert end newContextEnd values
+
+                 in if (oldContextEnd /= newContextEnd) --Context value changed?
+                    then solve' newWorklist newContexts
+                    else solve' worklistTail values
+-}
+         in solve' worklist values
 
 {-
 forEachContext :: (Label -> a -> b) -> Values a -> Values b
-forEachContext func = IntMap.mapWithKey (\lab context -> Map.map (func lab) context)
+forEachContext func = IM.mapWithKey (\lab context -> Map.map (func lab) context)
 -}
 
-fixPoint :: (Eq a) => (a -> a) -> a -> a
-fixPoint f a | a == a'   = a
-             | otherwise = fixPoint f a'
-             where a' = f a
+fixPoint::(Eq a) => (a -> a) -> a -> a
+fixPoint f a | a == na   = a
+             | otherwise = fixPoint f na
+                where na = f a
         
 visualizeWContexts::(Show property) => Values property -> Program -> String -> IO ()
 visualizeWContexts values program file = 
-    let decorateNode (l, n) = [GV.Label (GV.StrLabel (show l ++ ":" ++ show n++" -- "++(show . fromJust .IntMap.lookup l $ values)))]
+    let decorateNode (l, n) = [GV.Label (GV.StrLabel (show l ++ ":" ++ show n++" -- "++(show . fromJust .IM.lookup l $ values)))]
     in visualizeProgramWInfo decorateNode file program

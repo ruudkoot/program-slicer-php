@@ -40,7 +40,7 @@ backwardsProgramSlicing program =
                                   where
                                       isRelevant (i,j) = (not . Set.null) $ Set.intersection a b
                                           where 
-                                              a = fromJust (Map.lookup context (fromJust (IntMap.lookup j relevantVariables)))
+                                              a = maybe Set.empty id (Map.lookup context (fromJust (IntMap.lookup j relevantVariables)))
                                               b = modified (statementAt program i)
 
               internalBackwardsProgramSlicing :: Program -> SlicingContext -> SlicingContext                             
