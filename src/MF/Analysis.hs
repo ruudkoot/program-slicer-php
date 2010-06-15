@@ -55,7 +55,10 @@ class (Ord property, Show property, Eq property) => Analysis analysis property |
 --Transfer function between FuncIn en Call
     transferParametersIn         :: analysis -> [IpfParameter] -> Set.Set property -> Set.Set property
 
---Merges result form function with local result
+--Transfer function between Back and Call
+    transferParametersThrough    :: analysis -> [IpfParameter] -> Set.Set property -> Set.Set property
+    
+--Merges result form Back with result from FuncIn
     transferFuncMerge      :: analysis -> Set.Set property -> Set.Set property -> Set.Set property
 
 --Merges 2 value-sets
@@ -107,14 +110,16 @@ class (Ord property, Show property, Eq property) => Analysis analysis property |
                      ipfContext (FuncIn _ _) (FuncCall _ _) =
                         let (call,_,_,back) = ipfByCall end program
                             funcBackContext = labelValues back values
+                            funcBackEffect = Map.map (transferParametersThrough analysis (ipfParameters program call)) funcBackContext
                             funcInEffect = changeContextsOut analysis program call contextStart 
-                        in mergeCallContexts analysis funcBackContext funcInEffect   
+                        in mergeCallContexts analysis funcBackEffect funcInEffect   
 
                      ipfContext (FuncBack _ ) (FuncCall _ _) = 
                         let (call,_,_,back) = ipfByCall end program
                             funcInContext = labelValues back values
                             funcInEffect = changeContextsOut analysis program call funcInContext 
-                        in mergeCallContexts analysis contextStart funcInEffect   
+                            funcBackEffect = Map.map (transferParametersThrough analysis (ipfParameters program call)) contextStart
+                        in mergeCallContexts analysis funcBackEffect funcInEffect   
                      
                      ipfContext (FuncBack _ ) Return  =
                         let (call,_,_,back) = ipfByBack start program

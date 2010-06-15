@@ -20,12 +20,12 @@ function abc($a,$b,$c)
 
 //abc(1.0,2.0,4.0);
 
-function powerRec($base,$exp)
+function powerRec($base,$exp,$foo)
 {
     if($exp == 0)
         return 1;
     else 
-        return powerRec($base,$exp-1);
+        return $base*powerRec($base,$exp-1,1);
 }
 
 /*
@@ -40,7 +40,7 @@ function powerFor($base,$exp)
 $a = powerFor(4,5);*/
 $v1=4;
 $v2=5;
-$b = powerRec($v1,$v2);
+$b = powerRec($v1,$v2,1);
 
 /*
 function retTest($a)

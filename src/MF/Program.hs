@@ -9,6 +9,7 @@ import qualified Data.Graph.Inductive as G
 import qualified Data.GraphViz as GV
 
 import Data.Maybe
+import Debug.Trace
 
 type Label = Int
 type Flow = [(Label, Label)]
@@ -72,7 +73,6 @@ modified :: Statement -> Set.Set SymbolType
 modified (Assign c expr _)= Set.singleton c
 modified _                = Set.empty
 
-
 referenced :: Statement -> Set.Set SymbolType
 referenced (Assign c expr _)= freeVariables expr
 referenced (Expr expr)      = freeVariables expr 
@@ -127,8 +127,8 @@ instance Show Expression where
     show (Val v)            = show v
 
 instance Show Value where
-    show (Const val)        = val
-    show (Var val)          = val
+    show (Const val)        = "C:"++ val
+    show (Var val)          = "V:"++ val
 
 visualizeProgram::String -> Program -> IO ()
 visualizeProgram = visualizeProgramWInfo decorateNode

@@ -11,6 +11,8 @@ import qualified Data.Map    as Map
 import qualified Data.Graph.Inductive as G
 import qualified Data.GraphViz        as GV
 
+import Debug.Trace
+
 type Statements     = Map.Map CallContext (Set.Set Label)
 type SlicingContext = ( Statements          -- set of relevant statements
                       , Values SymbolType ) -- context with variables
@@ -62,14 +64,14 @@ backwardsProgramSlicing program =
                       insertControlStatements program ctx = Map.foldWithKey traverseContext Map.empty ctx
                           where traverseContext callcontext labels vs = Set.fold traverseEnv vs labels
                                   where traverseEnv label vs = let newValues = Map.singleton callcontext (referenced $ statementAt program label)         
-                                                                in Map.insertWith Map.union label newValues vs 
+                                                                in trace (show $ statementAt program label) Map.insertWith Map.union label newValues vs 
 
 
 -- |Produces a list of calls to the trace function and the associated variables.
 traceStatements :: Program -> Map.Map Label (Set.Set SymbolType)
 traceStatements = Map.foldWithKey f (Map.empty) . blocks
     where
-        f l (FuncCall "trace" vars) r = Map.insert l (Set.fromList vars) r
+        f l (FuncCall "trace" vars) r = Map.insert l (Set.fromList (take (length vars -1) vars)) r
         f _ _                       r = r
 
 allStatements::Statements -> Set.Set Label
@@ -83,7 +85,9 @@ visualizeSlice program file =
         traceColor = GV.FillColor (GV.RGB 255 0 0)
         useColor   = GV.FillColor (GV.RGB 0   255 0)
         noneColor  = GV.FillColor (GV.RGB 128 128 128)
-        decorateNode (l, n) = [GV.Label (GV.StrLabel (show l ++ ":" ++ show n++" -- "++(show . Map.toList . labelValues l $ contexts)))
+        decorateNode (l, n) = [GV.Label (GV.StrLabel (show l ++ ":" ++ show n++" -- "++
+                    (show . Map.toList . labelValues l $ contexts)++"\\n"++
+                    (show . Map.toList . labelValues l $ transferAll DirectlyRelevantVariables program contexts)))
                               ,GV.Style [GV.SItem GV.Filled []]
                               ,if Map.member l traces
                                then traceColor

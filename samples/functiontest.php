@@ -1,22 +1,20 @@
 <?
+
 function isValidUser($name,$message)
 {
     if($name == null)
     {
         echo $message+$name;
-        return false;
+        return 0;
     }
     else
-        return true;
+        return 1;
 }
 
 $validUsers = 0;
 
-for($i=0;$i<$numUsers;$i++)
-{
-    if(isValidUser(getUser($i),"Invalid user: "))
-        $validUsers++;
-}
+if(isValidUser(getUser($i),"Invalid user: "))
+    $validUsers++;
 
 trace($validUsers);
 ?>

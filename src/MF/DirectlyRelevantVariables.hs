@@ -17,15 +17,20 @@ instance Analysis DirectlyRelevantVariables SymbolType where
     join              _         = Set.union
 
     transferParametersIn _ ipfparams old = foldr varfunc Set.empty ipfparams
-        where varfunc (c, i, _) rest = if Set.member c old
-                                         then Set.insert i rest
-                                         else rest
+        where varfunc (actual, formal, ref) rest = if ref && Set.member actual old
+                                                    then Set.insert formal rest
+                                                    else rest
 
     transferParametersOut  _ ipfparams old = foldr varfunc Set.empty ipfparams
-        where varfunc (c, i, ref) rest = if Set.member i old
-                                          then Set.insert c rest 
-                                          else rest
+        where varfunc (actual, formal, ref) rest = if Set.member formal old
+                                                    then Set.insert actual rest 
+                                                    else rest
     
+    transferParametersThrough _ ipfparams old = old Set.\\ foldr reffed Set.empty ipfparams
+        where reffed (actual, formal, ref) rest = if ref
+                                                  then Set.insert actual rest
+                                                  else rest
+       
     transferFuncMerge _ = Set.union
     
     cutoff _ = 2

@@ -230,7 +230,7 @@ SEM Statement
     | While     +roi = Map.insert @loc.label (Map.keysSet @block.labels)
     | For       +roi = Map.insert @loc.label (Map.keysSet @block.labels)
     | If        +roi = Map.insert @loc.label (Map.keysSet @thn.labels `Set.union` Map.keysSet @els.labels)
-    | FuncDef   +roi = Map.insert @loc.label (Set.fromList ((@loc.retLabel : Map.keys  @block.labels)))
+--    | FuncDef   +roi = Map.insert @loc.label (Set.fromList ((@loc.retLabel : Map.keys  @block.labels)))
 
 SEM Expression
     | TernaryIf +roi = Map.insert @loc.label (Set.fromList 
