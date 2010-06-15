@@ -115,8 +115,8 @@ class (Ord property, Show property, Eq property) => Analysis analysis property |
                         in mergeCallContexts analysis funcBackEffect funcInEffect   
 
                      ipfContext (FuncBack _ ) (FuncCall _ _) = 
-                        let (call,_,_,back) = ipfByCall end program
-                            funcInContext = labelValues back values
+                        let (call,ins,_,back) = ipfByCall end program
+                            funcInContext = labelValues ins values
                             funcInEffect = changeContextsOut analysis program call funcInContext 
                             funcBackEffect = Map.map (transferParametersThrough analysis (ipfParameters program call)) contextStart
                         in mergeCallContexts analysis funcBackEffect funcInEffect   

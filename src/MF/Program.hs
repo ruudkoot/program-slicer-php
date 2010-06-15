@@ -74,7 +74,8 @@ modified (Assign c expr _)= Set.singleton c
 modified _                = Set.empty
 
 referenced :: Statement -> Set.Set SymbolType
-referenced (Assign c expr _)= freeVariables expr
+referenced (Assign c expr "") = freeVariables expr
+referenced (Assign c expr _) = Set.insert c (freeVariables expr)
 referenced (Expr expr)      = freeVariables expr 
 referenced (While expr)     = freeVariables expr
 referenced (If expr)        = freeVariables expr
@@ -127,8 +128,8 @@ instance Show Expression where
     show (Val v)            = show v
 
 instance Show Value where
-    show (Const val)        = "C:"++ val
-    show (Var val)          = "V:"++ val
+    show (Const val)        = val
+    show (Var val)          = val
 
 visualizeProgram::String -> Program -> IO ()
 visualizeProgram = visualizeProgramWInfo decorateNode
@@ -148,5 +149,5 @@ visualizeProgramWInfo nfunc fil prog =
                      , GV.Concentrate True
                      , GV.Root (GV.NodeName (show (startLabel prog)))]]
         dotted = GV.clusterGraphToDot True g graphAtts clusterNode (Just. GV.Int) (const []) nfunc (const [])
-    in do GV.runGraphvizCommand GV.dirCommand dotted GV.Jpeg (fil++".jpg")
+    in do GV.runGraphvizCommand GV.dirCommand dotted GV.Png (fil++".png")
           return ()
