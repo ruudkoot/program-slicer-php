@@ -85,7 +85,10 @@ class (Ord property, Show property, Eq property) => Analysis analysis property |
     cutoffRecursion :: analysis -> LabelValues property -> LabelValues property
     cutoffRecursion analysis = Map.foldWithKey cfunc Map.empty
         where cfunc callcontext = Map.insertWith (join analysis) (take (cutoff analysis) callcontext)
-
+    
+    --Run this when a function is not implemented
+    defaultFunction :: analysis -> [String] -> Set.Set property -> Set.Set property
+    
 --FCall gets on call stack!
     solve :: analysis -> Program -> Values property -> Values property
     solve analysis program values = 
@@ -129,9 +132,12 @@ class (Ord property, Show property, Eq property) => Analysis analysis property |
                      ipfContext _              _           = oldContextEnd `ajoin` effectStart
                      
                      --Updated worklist/labelProperties
-                     newContextEnd   = if inIpf start program
-                                       then ipfContext statementStart statementEnd
-                                       else oldContextEnd `ajoin` effectStart
+                     newContextEnd   = 
+                        if inIpf start program --Decide for interprocedural flow
+                        then ipfContext statementStart statementEnd
+                        else case (statementStart,statementEnd) of
+                                --(FuncBack _, FuncCall _ args) -> Map.map (defaultFunction analysis args) contextStart
+                                _                             -> oldContextEnd `ajoin` effectStart
 
                      newWorklist     = worklistTail ++ [(l', l'') | (l', l'') <- flow, l' == end] 
                      newContexts     = Map.insert end newContextEnd values

@@ -65,7 +65,7 @@ backwardsProgramSlicing program =
                       insertControlStatements program ctx = Map.foldWithKey traverseContext Map.empty ctx
                           where traverseContext callcontext labels vs = Set.fold traverseEnv vs labels
                                   where traverseEnv label vs = let newValues = Map.singleton callcontext (referenced $ statementAt program label)         
-                                                                in trace (show $ statementAt program label) Map.insertWith Map.union label newValues vs 
+                                                                in Map.insertWith Map.union label newValues vs 
 
 
 -- |Produces a list of calls to the trace function and the associated variables.
@@ -89,7 +89,8 @@ relevantStatements program (statements, contexts) =
                          in if any (\v' -> not (null ((Set.toList v') `intersect` args))) (Map.elems funcInEffect) 
                             then Set.fromList [call,fret,fin,back] `Set.union` rest
                             else rest
-                    else rest
+                    else let (call,_,_,back) = ipfByCall k program
+                         in Set.fromList [{- call,back -}] `Set.union` rest
                 _               -> rest
     in Map.foldWithKey statementRelevant baseStatements contexts
 

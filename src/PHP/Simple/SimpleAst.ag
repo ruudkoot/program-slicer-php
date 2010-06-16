@@ -301,6 +301,6 @@ program p = let res = wrap_Program (sem_Program p) inh
                 ,P.startLabel  = entry_Syn_Program res
                 ,P.finalLabels   = []
                 ,P.rangeOfInfluence = roi_Syn_Program res
-                ,P.interProceduralFlow = filterIpf $ ipf_Syn_Program res}
+                ,P.interProceduralFlow = ipf_Syn_Program res}
 
 }

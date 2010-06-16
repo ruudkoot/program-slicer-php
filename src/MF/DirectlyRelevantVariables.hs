@@ -33,13 +33,15 @@ instance Analysis DirectlyRelevantVariables SymbolType where
        
     transferFuncMerge _ = Set.union
     
-    cutoff _ = 2
+    defaultFunction analysis args old = Set.fromList args `Set.union` old
+
+    cutoff _ = 4
     
     kill     _ (FuncCall _ _) _ = Set.empty
     kill     _ (FuncIn _ _) _   = Set.empty
     kill     _ (FuncBack _ ) _  = Set.empty
     kill     _ (Return) _       = Set.empty
-    kill     _ statement _      = modified statement                  
+    kill     _ statement _      = Set.delete "@return" $ modified statement
     
     generate _ (FuncCall _ _) _ = Set.empty
     generate _ (FuncIn _ _) _   = Set.empty

@@ -10,4 +10,6 @@ while($i <= $n)
     $i = $i + 1;
 }
 echo $x;
+
+trace($x);
 ?>

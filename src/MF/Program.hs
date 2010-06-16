@@ -88,7 +88,7 @@ ipfByBack :: Label -> Program -> Ipf
 ipfByBack b = maybe (error "ipfByBack") id . find (\(_, _, _, l) -> l == b) . interProceduralFlow
 
 inIpf :: Label -> Program -> Bool
-inIpf l = isJust . find (\(a,b,c,d) -> a == l || b ==  l || c == l || d == l) . interProceduralFlow
+inIpf l = isJust . find (\(a,b,c,d) -> (a == l || b ==  l || c == l || d == l) && b /= -1) . interProceduralFlow
 
 ipfParameters :: Program -> Label -> [IpfParameter]
 ipfParameters program call = 
