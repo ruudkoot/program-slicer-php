@@ -19,7 +19,8 @@ library in the "lib" directory might need to be build and installed using
         DirectlyRelevantVariables.hs    A monotone analysis used by the program
                                         slicing to find the "directly relevant
                                         variables" as described in [1].
-        Program.hs                      An AST for desugared PHP.
+        Program.hs                      An AST for desugared PHP. Helper functions
+                                        for the Program AST.
         ProgramSlicing.hs               The actual program slicing algorithm
                                         (described below).
     /PHP
@@ -28,6 +29,9 @@ library in the "lib" directory might need to be build and installed using
                                         PHP. Responsible for constructing the
                                         (inter- and intra-procedural) control
                                         flow.
+            AST2Simple.hs               Converts the concrete syntax tree from 
+                                        the php parser to the abstract syntax 
+                                        tree defined in SimepleAST.ag
 
 
 == Limitations and known issues ================================================
@@ -36,11 +40,98 @@ As of the moment of writing we were aware of the following limitations and
 issues with our anaylizer:
 
 * All variables are assumed to be local and unshadowed.
-* Arrays and objects are not supported.
+* Arrays and objects, switch statements are not supported. 
 * Calls to "undefined" functions (i.e. functions not defined in the PHP module
   being analyzed, e.g library functions) do not make its return value depend
   on the actual parameters.
 
+Language Features that are supported:
+* Ternary ifs
+* Increment operators
+* Assign and increment operator (+=)
+
+igh Level Overview
+
+== Program Slicing algorithm ===================================================
+
+The actual program slicing analysis will be executed on the simplified and de-sugared 
+AST build in the preprocessing phase. The program slicing analysis has two step:
+
+1. First, the directly relevant variables are calculated. In backwards program slicing, 
+a variable is directly relevant if it is used in the right hand side of and 
+assignment in which the left hand side is another relevant variable. Initially, 
+the slicing criterium is used to start the analysis. To compute the directly 
+relevant variables an instance of the monotone framework called DirectlyRelevantVariables 
+is solved. The result of the solve function has the type:
+
+Map Label (Map CallContext (Set SymbolType))
+
+This indicates that support for procedures is added by allowing inter procedural 
+directly relevant variables analysis within the monotone framework. 
+
+2. In step two the dependent control statements like if and while statements are 
+taken into account. To do this, first the notion of directly relevant statements
+is introduced. A statement is directly relevant if a directly relevant variable,
+as calculated in step one, is assigned in this statement. We consider a control
+statement relevant if a relevant statement is found within its range of influence. 
+Variables referenced in a relevant control statement are added to the map of relevant 
+variables, and a new fix point is calculated. Step two is executed recursively until 
+the  relevant variables remains unchanged. 
+
+The relevant variables are returned as the output of the program slicing algorithm.
+
+Post processing
+
+In the post processing phase visual representation of the program slice is 
+generated. Statements that are part of the slice are coloured green, statements 
+that are not part of the slice are coloured gray. A statement is part of the 
+program slice if a relevant variable is defined, or in case of a control statement 
+if a relevant variable is referenced. 
+
+== Interprocedural Flow ========================================================
+
+Interprocedrual flow is represented by the 4-tuple of labels described in the book.
+We have decided to implement the interprocedural-flow part within the Monotone 
+Framework. To accomplish this we extended the basic monotone framweork with a few 
+extra functions/data structures:
+
+* Calling context is added to the analysis result.
+* The monotone framwork lifts the standard intra-procedural functions into the calling contexts.
+* Pattern matching is done on the statements which constitute to the interprocedura
+    flow and different behaviour is implemented for them.
+* The monotone framework now requires 4 more functions which provide functionality
+    for translating formal/actual parameters, merging result values and specifying when
+    to cut off the calling contexts. Moving in and out of context is done by the framwork itself.
+    
+== Creating the Labels/Control flow ============================================
+
+Starting from the AST defined in SimpleAST.hs we try to construct the 6 
+elementary data structures needed for our analysis:
+
+* Program labels
+* Control flow
+* Inter- procedural flow
+* Entry labels
+* Exit labels
+* Range of Influence of block-statements (if/while).
+
+The system also desugars the expressions into a form containing only assignments,
+unary and binary operators for expressions, thus making the evaluation order
+explicit. To accomplish this, dummy variables are introduced for subexpressions.
+
+Function calls, which are seen as expressions in the original sytnax tree, 
+will be converted to statements using at the call site: FuncCall and FuncBack. 
+At the definition side: FuncIn and Return.
+
+To construct the control flow, each statement in the original AST has 2
+important attributes:
+
+* an inherited attribute exit to which it can flow.
+* a synthesized attribute entry which tells the node up in the tree where
+  it can enter.
+
+This way, complete control is given to the subexpressions with respect to
+what flow and labels they generate, this makes them context-independant.
 
 == References ==================================================================
 
