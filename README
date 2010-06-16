@@ -1,0 +1,34 @@
+== Building
+
+Build the program with "make". It assumes that "uuagc" is installed. The "futil"
+library in the "lib" directory might need to be build and installed using
+"cabal" first.
+
+
+== Source overview
+
+/lib
+    /futil                              Helper library
+/samples                                Sample PHP programs and output generated
+                                        by our analyzer.
+/src
+    Main.hs                             Main module
+    /MF
+        Analysis.hs                     Generic embelished monotone framework.
+                                        Includes the fixed point solver.
+        DirectlyRelevantVariables.hs    A monotone analysis used by the program
+                                        slicing to find the "directly relevant
+                                        variables" as described in [1].
+        Program.hs                      An AST for desugared PHP.
+        ProgramSlicing.hs               The actual program slicing algorithm
+                                        (described below).
+    /PHP
+        /Simple
+            SimpleAST.ag                Attribute grammar working on desugared
+                                        PHP. Responsible for constructing the
+                                        (inter- and intra-procedural) control
+                                        flow.
+                                        
+== References
+
+[1] Frank Tip. A Survey of Program Slicing Techniques.
