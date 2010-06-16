@@ -1,9 +1,10 @@
-== Building ====================================================================
+== Building and running ========================================================
 
 Build the program with "make". It assumes that "uuagc" is installed. The "futil"
 library in the "lib" directory might need to be build and installed using
 "cabal" first.
 
+Running the program requires the "graphviz" package to be installed!
 
 == Source overview =============================================================
 
