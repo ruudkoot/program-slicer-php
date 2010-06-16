@@ -89,8 +89,7 @@ relevantStatements program (statements, contexts) =
                          in if any (\v' -> not (null ((Set.toList v') `intersect` args))) (Map.elems funcInEffect) 
                             then Set.fromList [call,fret,fin,back] `Set.union` rest
                             else rest
-                    else let (call,_,_,back) = ipfByCall k program
-                         in Set.fromList [{- call,back -}] `Set.union` rest
+                    else rest
                 _               -> rest
     in Map.foldWithKey statementRelevant baseStatements contexts
 

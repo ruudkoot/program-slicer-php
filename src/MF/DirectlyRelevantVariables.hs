@@ -32,8 +32,6 @@ instance Analysis DirectlyRelevantVariables SymbolType where
                                                   else rest
        
     transferFuncMerge _ = Set.union
-    
-    defaultFunction analysis args old = Set.fromList args `Set.union` old
 
     cutoff _ = 4
     
