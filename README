@@ -1,11 +1,11 @@
-== Building
+== Building ====================================================================
 
 Build the program with "make". It assumes that "uuagc" is installed. The "futil"
 library in the "lib" directory might need to be build and installed using
 "cabal" first.
 
 
-== Source overview
+== Source overview =============================================================
 
 /lib
     /futil                              Helper library
@@ -28,7 +28,20 @@ library in the "lib" directory might need to be build and installed using
                                         PHP. Responsible for constructing the
                                         (inter- and intra-procedural) control
                                         flow.
-                                        
-== References
+
+
+== Limitations and known issues ================================================
+
+As of the moment of writing we were aware of the following limitations and
+issues with our anaylizer:
+
+* All variables are assumed to be local and unshadowed.
+* Arrays and objects are not supported.
+* Calls to "undefined" functions (i.e. functions not defined in the PHP module
+  being analyzed, e.g library functions) do not make its return value depend
+  on the actual parameters.
+
+
+== References ==================================================================
 
 [1] Frank Tip. A Survey of Program Slicing Techniques.
